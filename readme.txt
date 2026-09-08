@@ -4,7 +4,7 @@ Tags:              mcp, ai, abilities-api, model-context-protocol, menus, elemen
 Requires at least: 6.9
 Tested up to:      7.0
 Requires PHP:      7.4
-Stable tag:        1.2.0
+Stable tag:        1.3.0
 License:           GPL-2.0-or-later
 License URI:       https://spdx.org/licenses/GPL-2.0-or-later.html
 
@@ -14,7 +14,7 @@ Model Context Protocol server for WordPress, with tools for editing and publishi
 
 Meta MCP bridges WordPress's Abilities API with the [Model Context Protocol (MCP)](https://modelcontextprotocol.io) specification, so AI agents can work with a WordPress site through a standard interface. It is a fork of the [WordPress MCP Adapter](https://github.com/WordPress/mcp-adapter) 0.6.1, extended with a second MCP server dedicated to content editing.
 
-This plugin is maintained privately and declares `Update URI: false`, so it is never updated from WordPress.org.
+This plugin is not distributed through WordPress.org. Its `Update URI` points at [its own GitHub repository](https://github.com/jyothisjoy/meta-mcp), and updates are pulled from the releases published there, so WordPress.org can never overwrite it.
 
 **Adapter features (from upstream):**
 
@@ -48,7 +48,13 @@ Requires WordPress 6.9 or newer (the Abilities API is included in core).
 
 = Will this be overwritten by updates to the WordPress MCP Adapter? =
 
-No. It uses its own plugin slug, so WordPress.org has nothing to match it against, and it declares `Update URI: false`, which tells WordPress never to accept an update for it from WordPress.org.
+No. It uses its own plugin slug, so WordPress.org has nothing to match it against, and its `Update URI` header points at its own GitHub repository, which tells WordPress never to accept an update for it from WordPress.org.
+
+= Where do updates come from, then? =
+
+From the releases at [github.com/jyothisjoy/meta-mcp](https://github.com/jyothisjoy/meta-mcp). The plugin checks for a newer release roughly twice a day and, when it finds one, offers the update on Plugins → Installed Plugins exactly like any other plugin. There is nothing to configure.
+
+To turn updates off on a particular site, add `define( 'META_MCP_DISABLE_UPDATE_CHECKER', true );` to its `wp-config.php`.
 
 = Does this work with the menus under Appearance → Menus? =
 
@@ -59,6 +65,11 @@ Yes. Those classic menus have their own set of tools, because a menu item stores
 No. The content tools work on any WordPress site. The Elementor and Polylang tools activate only when those plugins are present; call the `content-integrations-status` tool to see what a given site supports.
 
 == Changelog ==
+
+= 1.3.0 =
+* Added automatic updates from the plugin's GitHub releases, using Plugin Update Checker 5.7. Updates appear on Plugins → Installed Plugins like any other plugin, and nothing needs configuring on the site.
+* `Update URI` now points at the plugin's GitHub repository rather than `false`. WordPress.org still cannot claim the slug or overwrite the plugin.
+* Update checks are skipped on front-end requests, and can be turned off entirely with `define( 'META_MCP_DISABLE_UPDATE_CHECKER', true );`.
 
 = 1.2.0 =
 * Added navigation menu abilities: list menus, get menu, create, update and delete a menu, add, update and delete menu items, set a whole menu structure from a nested tree, list theme menu locations and assign menus to them.
