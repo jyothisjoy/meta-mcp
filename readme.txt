@@ -4,7 +4,7 @@ Tags:              mcp, ai, abilities-api, model-context-protocol, menus, elemen
 Requires at least: 6.9
 Tested up to:      7.0
 Requires PHP:      7.4
-Stable tag:        1.3.0
+Stable tag:        1.3.1
 License:           GPL-2.0-or-later
 License URI:       https://spdx.org/licenses/GPL-2.0-or-later.html
 
@@ -65,6 +65,10 @@ Yes. Those classic menus have their own set of tools, because a menu item stores
 No. The content tools work on any WordPress site. The Elementor and Polylang tools activate only when those plugins are present; call the `content-integrations-status` tool to see what a given site supports.
 
 == Changelog ==
+
+= 1.3.1 =
+* Fixed copied Elementor headers and footers losing their template type and display conditions. `copy_document()` wrote both before saving the elements, but Elementor's document API rewrites `_elementor_template_type` from the document it just saved, and Elementor Pro's theme documents drop conditions that are not part of the save payload. Both are now written afterwards.
+* This is what made a translated header or footer inert: it was stored as a plain document with no conditions, so Elementor never rendered it, while the language it belonged to stopped falling back to the source template — leaving that language with no header at all.
 
 = 1.3.0 =
 * Added automatic updates from the plugin's GitHub releases, using Plugin Update Checker 5.7. Updates appear on Plugins → Installed Plugins like any other plugin, and nothing needs configuring on the site.

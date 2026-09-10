@@ -20,7 +20,7 @@
  * @wordpress-plugin
  * Plugin Name:       Meta MCP
  * Description:       Model Context Protocol server for WordPress. Exposes abilities as MCP tools, and adds content, navigation menu, Elementor and Polylang editing and publishing tools.
- * Version:           1.3.0
+ * Version:           1.3.1
  * Requires at least: 6.9
  * Tested up to:      7.0
  * Requires PHP:      7.4
@@ -50,7 +50,7 @@ function constants(): void {
 	/**
 	 * Version of the plugin.
 	 */
-	define( 'META_MCP_VERSION', '1.3.0' );
+	define( 'META_MCP_VERSION', '1.3.1' );
 
 	/**
 	 * Version of the upstream MCP Adapter this fork is based on.

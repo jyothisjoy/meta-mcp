@@ -618,12 +618,25 @@ final class ElementorSupport {
 		}
 
 		$template_type = (string) get_post_meta( $source_id, '_elementor_template_type', true );
+		$page_settings = get_post_meta( $source_id, '_elementor_page_settings', true );
 
+		$saved = self::save_elements( $target_id, $elements );
+
+		if ( is_wp_error( $saved ) ) {
+			return $saved;
+		}
+
+		// These have to be written after the elements, not before. Elementor's
+		// document API rewrites `_elementor_template_type` from the document
+		// instance it just saved, and Elementor Pro's theme documents drop any
+		// conditions that were not part of the save payload. Setting them first
+		// means a copied header or footer is stored as a plain document with no
+		// conditions, which Elementor then never renders — while the language
+		// it belongs to stops falling back to the source template, so the front
+		// end loses its header entirely.
 		if ( '' !== $template_type ) {
 			update_post_meta( $target_id, '_elementor_template_type', $template_type );
 		}
-
-		$page_settings = get_post_meta( $source_id, '_elementor_page_settings', true );
 
 		if ( ! empty( $page_settings ) ) {
 			update_post_meta( $target_id, '_elementor_page_settings', wp_slash( $page_settings ) );
@@ -631,7 +644,7 @@ final class ElementorSupport {
 
 		self::copy_display_conditions( $source_id, $target_id );
 
-		return self::save_elements( $target_id, $elements );
+		return $saved;
 	}
 
 	/**
