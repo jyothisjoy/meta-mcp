@@ -185,6 +185,21 @@ final class SettingsPage {
 					</tr>
 
 					<tr>
+						<th scope="row"><?php esc_html_e( 'User accounts', 'meta-mcp' ); ?></th>
+						<td>
+							<label>
+								<input type="checkbox"
+									name="<?php echo esc_attr( Settings::OPTION ); ?>[users_enabled]"
+									value="1" <?php checked( ! empty( $settings['users_enabled'] ) ); ?> />
+								<?php esc_html_e( 'Expose the tools for listing, creating, editing and deleting users', 'meta-mcp' ); ?>
+							</label>
+							<p class="description">
+								<?php esc_html_e( 'Off by default. Every call still needs the matching WordPress capability, and no tool can read or set a password — a new or locked-out account is reached by emailing its owner a link to set their own. Deleting a user is immediate and has no trash.', 'meta-mcp' ); ?>
+							</p>
+						</td>
+					</tr>
+
+					<tr>
 						<th scope="row"><?php esc_html_e( 'Writing', 'meta-mcp' ); ?></th>
 						<td>
 							<label>

@@ -47,6 +47,11 @@ use WP\MCP\Abilities\Support\AbilityRegistrar;
 use WP\MCP\Abilities\Support\ElementorSupport;
 use WP\MCP\Abilities\Support\PolylangSupport;
 use WP\MCP\Abilities\Support\Settings;
+use WP\MCP\Abilities\Users\CreateUserAbility;
+use WP\MCP\Abilities\Users\DeleteUserAbility;
+use WP\MCP\Abilities\Users\GetUserAbility;
+use WP\MCP\Abilities\Users\ListUsersAbility;
+use WP\MCP\Abilities\Users\UpdateUserAbility;
 use WP\MCP\Servers\ContentServerFactory;
 
 // Exit if accessed directly.
@@ -95,6 +100,13 @@ final class ContentAbilities {
 			SetMenuItemsAbility::class,
 			ListMenuLocationsAbility::class,
 			SetMenuLocationsAbility::class,
+		),
+		'users'     => array(
+			ListUsersAbility::class,
+			GetUserAbility::class,
+			CreateUserAbility::class,
+			UpdateUserAbility::class,
+			DeleteUserAbility::class,
 		),
 		'elementor' => array(
 			GetElementorStructureAbility::class,
@@ -203,6 +215,29 @@ final class ContentAbilities {
 	}
 
 	/**
+	 * Whether the user abilities are registered on this site.
+	 *
+	 * Off by default, unlike every other group. The rest of this plugin edits
+	 * content; these tools edit the people who own it, and can lock someone out
+	 * of their own site. That is worth an explicit decision rather than
+	 * something a site inherits by installing an update.
+	 *
+	 * @return bool True when they should be registered.
+	 */
+	private static function users_enabled(): bool {
+		/**
+		 * Filters whether the MCP user abilities are registered.
+		 *
+		 * Defaults to the value set on the Meta MCP settings screen.
+		 *
+		 * @since 1.4.0
+		 *
+		 * @param bool $enabled Whether to register the user abilities.
+		 */
+		return (bool) apply_filters( 'mcp_adapter_user_abilities_enabled', Settings::users_enabled() );
+	}
+
+	/**
 	 * Whether the content abilities are enabled on this site.
 	 *
 	 * @return bool True when they should be registered.
@@ -243,6 +278,10 @@ final class ContentAbilities {
 
 		if ( self::menus_enabled() ) {
 			$groups[] = 'menus';
+		}
+
+		if ( self::users_enabled() ) {
+			$groups[] = 'users';
 		}
 
 		if ( $register_inactive || ElementorSupport::is_active() ) {

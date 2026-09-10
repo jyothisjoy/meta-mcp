@@ -4,7 +4,7 @@ Tags:              mcp, ai, abilities-api, model-context-protocol, menus, elemen
 Requires at least: 6.9
 Tested up to:      7.0
 Requires PHP:      7.4
-Stable tag:        1.3.1
+Stable tag:        1.4.0
 License:           GPL-2.0-or-later
 License URI:       https://spdx.org/licenses/GPL-2.0-or-later.html
 
@@ -27,9 +27,10 @@ This plugin is not distributed through WordPress.org. Its `Update URI` points at
 
 **Content editing (added in this fork):**
 
-A second MCP server at `/wp-json/mcp/wp-content` exposes 34 first-class tools:
+A second MCP server at `/wp-json/mcp/wp-content` exposes 39 first-class tools:
 
 * **Content** – Query, read, create, update, publish, schedule and delete posts of any post type, plus taxonomy terms, custom fields and media uploads.
+* **Users** – List, read, create, edit and delete user accounts, with roles and profile fields. Switched off by default, and no tool ever reads or sets a password.
 * **Navigation menus** – List and read the site's menus as a nested tree, create and rename them, add, edit, move and remove individual items, write a whole menu structure in one call, and assign menus to the theme's locations. Items may point at a page, post, category, tag, post type archive or a custom URL, and every target is checked before it is written.
 * **Elementor** – Read a layout as a flat, id-addressable list; patch individual widgets by element id; or read and replace the whole element tree. Writes route through Elementor's document API so the generated CSS and companion metas stay consistent.
 * **Polylang and Polylang Pro** – Languages, per-post language assignment, linking translations, creating a translation that carries over terms, meta and the Elementor layout, term translations, and on-demand structure sync.
@@ -65,6 +66,14 @@ Yes. Those classic menus have their own set of tools, because a menu item stores
 No. The content tools work on any WordPress site. The Elementor and Polylang tools activate only when those plugins are present; call the `content-integrations-status` tool to see what a given site supports.
 
 == Changelog ==
+
+= 1.4.0 =
+* Added user abilities: list users, get user, create user, update user and delete user, covering roles and every profile field.
+* The user tools are **off by default** and have their own switch on the settings screen, alongside a `mcp_adapter_user_abilities_enabled` filter. Managing accounts is a different kind of power from editing content, so a site opts into it rather than inheriting it from an update.
+* No ability reads or sets a password, and `user_pass` and `user_activation_key` never appear in a response. A new account gets a random password that is discarded; its owner reaches it through a password-set link emailed to them, either with `notify` on create or `send_password_reset` on update. Neither is sent unless it is asked for.
+* Every call is checked against the real WordPress capability for the specific user being touched, and the things core's own user screens refuse are refused here too: deleting your own account, changing your own role, and an ordinary administrator modifying a network super admin.
+* `delete-user` requires an explicit `confirm`, takes a `reassign` target for the deleted user's content, and says plainly that on multisite the account is only removed from the current site.
+* `content-integrations-status` now reports whether the user tools are enabled, which roles exist, the site's default role, and what the current user may do with accounts.
 
 = 1.3.1 =
 * Fixed copied Elementor headers and footers losing their template type and display conditions. `copy_document()` wrote both before saving the elements, but Elementor's document API rewrites `_elementor_template_type` from the document it just saved, and Elementor Pro's theme documents drop conditions that are not part of the save payload. Both are now written afterwards.
