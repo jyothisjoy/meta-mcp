@@ -4,7 +4,7 @@ Tags:              mcp, ai, abilities-api, model-context-protocol, menus, elemen
 Requires at least: 6.9
 Tested up to:      7.0
 Requires PHP:      7.4
-Stable tag:        1.4.0
+Stable tag:        1.4.1
 License:           GPL-2.0-or-later
 License URI:       https://spdx.org/licenses/GPL-2.0-or-later.html
 
@@ -66,6 +66,11 @@ Yes. Those classic menus have their own set of tools, because a menu item stores
 No. The content tools work on any WordPress site. The Elementor and Polylang tools activate only when those plugins are present; call the `content-integrations-status` tool to see what a given site supports.
 
 == Changelog ==
+
+= 1.4.1 =
+* Added `elementor-get-conditions` and `elementor-set-conditions`, which read and write an Elementor Pro Theme Builder template's display conditions. Elementor picks the header, footer or archive template for a request purely from these, so a template with none is never rendered and whichever template does match takes its place.
+* On a multilingual site that is what leaves a translated page wearing the source language's header, with every link in its navigation pointing back at the source language. There was no way to repair it through MCP: `MetaSupport` blocks every `_elementor*` key, and the one code path that did copy conditions also overwrote the whole translated layout.
+* `elementor-set-conditions` takes `copy_from_post_id` to lift the conditions off another template, rewriting any post or term ids they name to the target's language and reporting the ones with no translation in `untranslated_ids`. A condition naming a specific post, such as `include/singular/page/12`, would otherwise be copied onto a translation it can never match.
 
 = 1.4.0 =
 * Added user abilities: list users, get user, create user, update user and delete user, covering roles and every profile field.

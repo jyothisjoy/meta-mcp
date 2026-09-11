@@ -20,9 +20,11 @@ use WP\MCP\Abilities\Content\SetPostStatusAbility;
 use WP\MCP\Abilities\Content\SetPostTermsAbility;
 use WP\MCP\Abilities\Content\UpdatePostAbility;
 use WP\MCP\Abilities\Content\UploadMediaAbility;
+use WP\MCP\Abilities\Elementor\GetElementorConditionsAbility;
 use WP\MCP\Abilities\Elementor\GetElementorDataAbility;
 use WP\MCP\Abilities\Elementor\GetElementorStructureAbility;
 use WP\MCP\Abilities\Elementor\ListElementorTemplatesAbility;
+use WP\MCP\Abilities\Elementor\SetElementorConditionsAbility;
 use WP\MCP\Abilities\Elementor\SetElementorDataAbility;
 use WP\MCP\Abilities\Elementor\UpdateElementorElementAbility;
 use WP\MCP\Abilities\Menus\AddMenuItemAbility;
@@ -114,6 +116,8 @@ final class ContentAbilities {
 			SetElementorDataAbility::class,
 			UpdateElementorElementAbility::class,
 			ListElementorTemplatesAbility::class,
+			GetElementorConditionsAbility::class,
+			SetElementorConditionsAbility::class,
 		),
 		'polylang'  => array(
 			ListLanguagesAbility::class,
