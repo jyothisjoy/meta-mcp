@@ -95,6 +95,20 @@ final class MetaSupport {
 			return new WP_Error( 'meta_key_denied', sprintf( 'Meta key "%s" cannot be modified through MCP.', $key ) );
 		}
 
+		if ( in_array( $key, array( '_elementor_code', '_elementor_location', '_elementor_priority', '_elementor_extra_options' ), true ) && CustomCodeSupport::CPT === $post_type ) {
+			return new WP_Error(
+				'meta_key_denied',
+				sprintf( 'Meta key "%s" belongs to an Elementor Custom Code snippet. Use elementor-get-custom-code and elementor-set-custom-code instead.', $key )
+			);
+		}
+
+		if ( 0 === strpos( $key, '_elementor_conditions' ) ) {
+			return new WP_Error(
+				'meta_key_denied',
+				'Display conditions are managed by elementor-set-conditions (templates) and elementor-set-custom-code (snippets), which also rebuild Elementor Pro\'s conditions cache.'
+			);
+		}
+
 		if ( 0 === strpos( $key, '_elementor' ) ) {
 			return new WP_Error(
 				'meta_key_denied',
@@ -102,10 +116,50 @@ final class MetaSupport {
 			);
 		}
 
+		$allowed = self::writable_protected_keys( $post_type );
+
+		if ( in_array( $key, $allowed, true ) ) {
+			return true;
+		}
+
+		// Rank Math marks these protected on some sites and not on others, and
+		// several of them (robots, advanced robots) must be stored as arrays.
+		// Route them all to the SEO ability so they behave the same everywhere.
+		if ( 0 === strpos( $key, 'rank_math_' ) && RankMathSupport::is_active() ) {
+			return new WP_Error(
+				'meta_key_protected',
+				sprintf( 'Meta key "%s" is a Rank Math SEO field. Use seo-update-posts, which validates it and can change many posts in one call.', $key )
+			);
+		}
+
 		if ( ! is_protected_meta( $key, 'post' ) ) {
 			return true;
 		}
 
+		if ( '_wp_attachment_image_alt' === $key ) {
+			return new WP_Error(
+				'meta_key_protected',
+				'Image alt text is set with update-media.'
+			);
+		}
+
+		return new WP_Error(
+			'meta_key_protected',
+			sprintf(
+				'Meta key "%s" is protected. Add it to the "mcp_adapter_content_writable_protected_meta" filter to allow writing it.',
+				$key
+			)
+		);
+	}
+
+	/**
+	 * Returns the protected meta keys a site has allowlisted for writing.
+	 *
+	 * @param string $post_type Post type being written.
+	 *
+	 * @return string[] Allowlisted keys.
+	 */
+	private static function writable_protected_keys( string $post_type ): array {
 		/**
 		 * Filters the protected post meta keys writable through MCP.
 		 *
@@ -117,19 +171,7 @@ final class MetaSupport {
 		 * @param string[] $keys      Allowlisted protected meta keys.
 		 * @param string   $post_type Post type being written.
 		 */
-		$allowed = (array) apply_filters( 'mcp_adapter_content_writable_protected_meta', array(), $post_type );
-
-		if ( in_array( $key, $allowed, true ) ) {
-			return true;
-		}
-
-		return new WP_Error(
-			'meta_key_protected',
-			sprintf(
-				'Meta key "%s" is protected. Add it to the "mcp_adapter_content_writable_protected_meta" filter to allow writing it.',
-				$key
-			)
-		);
+		return array_map( 'strval', (array) apply_filters( 'mcp_adapter_content_writable_protected_meta', array(), $post_type ) );
 	}
 
 	/**

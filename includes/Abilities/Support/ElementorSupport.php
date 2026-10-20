@@ -708,6 +708,31 @@ final class ElementorSupport {
 	 * @return true|WP_Error True on success.
 	 */
 	public static function set_conditions( int $post_id, array $conditions ) {
+		$clean = self::clean_conditions( $conditions );
+
+		if ( is_wp_error( $clean ) ) {
+			return $clean;
+		}
+
+		if ( empty( $clean ) ) {
+			delete_post_meta( $post_id, '_elementor_conditions' );
+		} else {
+			update_post_meta( $post_id, '_elementor_conditions', wp_slash( $clean ) );
+		}
+
+		self::flush_conditions_cache();
+
+		return true;
+	}
+
+	/**
+	 * Validates and de-duplicates display condition strings.
+	 *
+	 * @param array<mixed> $conditions Condition strings.
+	 *
+	 * @return string[]|\WP_Error The clean conditions.
+	 */
+	public static function clean_conditions( array $conditions ) {
 		$clean = array();
 
 		foreach ( $conditions as $condition ) {
@@ -731,17 +756,7 @@ final class ElementorSupport {
 			$clean[] = $condition;
 		}
 
-		$clean = array_values( array_unique( $clean ) );
-
-		if ( empty( $clean ) ) {
-			delete_post_meta( $post_id, '_elementor_conditions' );
-		} else {
-			update_post_meta( $post_id, '_elementor_conditions', wp_slash( $clean ) );
-		}
-
-		self::flush_conditions_cache();
-
-		return true;
+		return array_values( array_unique( $clean ) );
 	}
 
 	/**
@@ -838,15 +853,71 @@ final class ElementorSupport {
 	}
 
 	/**
-	 * Drops Elementor Pro's cached condition-to-template map.
+	 * Rebuilds Elementor Pro's cached condition-to-template map.
 	 *
-	 * @return void
+	 * Elementor Pro reads which template serves each location (header, footer,
+	 * archive, Custom Code head/body) only from the `elementor_pro_theme_builder_conditions`
+	 * option, and never rebuilds it on its own when it is missing. Deleting the
+	 * option therefore switches off every Elementor header, footer and
+	 * conditioned snippet until someone next saves a template in wp-admin. So
+	 * the cache is regenerated through Elementor Pro's own class, exactly as its
+	 * conditions editor does after a save.
+	 *
+	 * When Elementor Pro is not loaded there is nothing reading the option, so
+	 * it is left alone.
+	 *
+	 * @return bool True when the cache was regenerated.
 	 */
-	public static function flush_conditions_cache(): void {
-		delete_option( 'elementor_pro_theme_builder_conditions' );
+	public static function flush_conditions_cache(): bool {
+		$manager = self::conditions_manager();
 
-		if ( function_exists( 'wp_cache_flush_group' ) ) {
-			wp_cache_delete( 'elementor_pro_theme_builder_conditions', 'options' );
+		if ( ! $manager || ! method_exists( $manager, 'get_cache' ) ) {
+			return false;
+		}
+
+		try {
+			$cache = $manager->get_cache();
+
+			if ( ! is_object( $cache ) || ! method_exists( $cache, 'regenerate' ) ) {
+				return false;
+			}
+
+			$cache->regenerate();
+		} catch ( \Throwable $e ) {
+			return false;
+		}
+
+		return true;
+	}
+
+	/**
+	 * Returns Elementor Pro's Theme Builder conditions manager, when loaded.
+	 *
+	 * @return object|null The conditions manager.
+	 */
+	public static function conditions_manager(): ?object {
+		if ( ! class_exists( '\ElementorPro\Plugin' ) ) {
+			return null;
+		}
+
+		try {
+			$plugin = \ElementorPro\Plugin::instance();
+
+			if ( ! isset( $plugin->modules_manager ) || ! is_object( $plugin->modules_manager ) ) {
+				return null;
+			}
+
+			$theme_builder = $plugin->modules_manager->get_modules( 'theme-builder' );
+
+			if ( ! is_object( $theme_builder ) || ! method_exists( $theme_builder, 'get_conditions_manager' ) ) {
+				return null;
+			}
+
+			$manager = $theme_builder->get_conditions_manager();
+
+			return is_object( $manager ) ? $manager : null;
+		} catch ( \Throwable $e ) {
+			return null;
 		}
 	}
 

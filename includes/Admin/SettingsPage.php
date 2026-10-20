@@ -200,6 +200,21 @@ final class SettingsPage {
 					</tr>
 
 					<tr>
+						<th scope="row"><?php esc_html_e( 'Site-wide tools', 'meta-mcp' ); ?></th>
+						<td>
+							<label>
+								<input type="checkbox"
+									name="<?php echo esc_attr( Settings::OPTION ); ?>[site_tools_enabled]"
+									value="1" <?php checked( ! empty( $settings['site_tools_enabled'] ) ); ?> />
+								<?php esc_html_e( 'Expose the tools for site settings, Rank Math SEO, Redirection rules, Elementor Custom Code and cache purging', 'meta-mcp' ); ?>
+							</label>
+							<p class="description">
+								<?php esc_html_e( 'These change the whole site rather than one post, so they have their own switch. Each still requires the capability the matching wp-admin screen needs, which by default only an administrator has; writing a Custom Code snippet also requires "Unfiltered HTML".', 'meta-mcp' ); ?>
+							</p>
+						</td>
+					</tr>
+
+					<tr>
 						<th scope="row"><?php esc_html_e( 'Writing', 'meta-mcp' ); ?></th>
 						<td>
 							<label>

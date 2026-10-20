@@ -46,7 +46,7 @@ class ContentServerFactory {
 			'server_route_namespace' => 'mcp',
 			'server_route'           => 'wp-content',
 			'server_name'            => 'WordPress Content Server',
-			'server_description'     => 'Read, edit and publish WordPress content of any post type, build and rearrange navigation menus, edit Elementor layouts, and manage Polylang translations.',
+			'server_description'     => 'Read, edit and publish WordPress content of any post type, build and rearrange navigation menus, edit Elementor layouts and Custom Code, manage Polylang translations, Rank Math SEO fields and settings, Redirection rules, site settings and media alt text, and purge the page cache.',
 			'server_version'         => 'v1.0.0',
 			'mcp_transports'         => array( HttpTransport::class ),
 			'error_handler'          => ErrorLogMcpErrorHandler::class,

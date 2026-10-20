@@ -18,12 +18,16 @@ use WP\MCP\Abilities\Content\ListPostTypesAbility;
 use WP\MCP\Abilities\Content\SetPostMetaAbility;
 use WP\MCP\Abilities\Content\SetPostStatusAbility;
 use WP\MCP\Abilities\Content\SetPostTermsAbility;
+use WP\MCP\Abilities\Content\UpdateMediaAbility;
 use WP\MCP\Abilities\Content\UpdatePostAbility;
 use WP\MCP\Abilities\Content\UploadMediaAbility;
+use WP\MCP\Abilities\Elementor\GetCustomCodeAbility;
 use WP\MCP\Abilities\Elementor\GetElementorConditionsAbility;
 use WP\MCP\Abilities\Elementor\GetElementorDataAbility;
 use WP\MCP\Abilities\Elementor\GetElementorStructureAbility;
+use WP\MCP\Abilities\Elementor\ListCustomCodeAbility;
 use WP\MCP\Abilities\Elementor\ListElementorTemplatesAbility;
+use WP\MCP\Abilities\Elementor\SetCustomCodeAbility;
 use WP\MCP\Abilities\Elementor\SetElementorConditionsAbility;
 use WP\MCP\Abilities\Elementor\SetElementorDataAbility;
 use WP\MCP\Abilities\Elementor\UpdateElementorElementAbility;
@@ -45,9 +49,22 @@ use WP\MCP\Abilities\Polylang\ListLanguagesAbility;
 use WP\MCP\Abilities\Polylang\SetPostLanguageAbility;
 use WP\MCP\Abilities\Polylang\SetTermLanguageAbility;
 use WP\MCP\Abilities\Polylang\SyncPostTranslationAbility;
+use WP\MCP\Abilities\Redirects\CreateRedirectsAbility;
+use WP\MCP\Abilities\Redirects\DeleteRedirectsAbility;
+use WP\MCP\Abilities\Redirects\ListRedirectsAbility;
+use WP\MCP\Abilities\Redirects\UpdateRedirectAbility;
+use WP\MCP\Abilities\Seo\SeoGetPostsAbility;
+use WP\MCP\Abilities\Seo\SeoGetSettingsAbility;
+use WP\MCP\Abilities\Seo\SeoUpdatePostsAbility;
+use WP\MCP\Abilities\Seo\SeoUpdateSettingsAbility;
+use WP\MCP\Abilities\Site\GetSiteSettingsAbility;
+use WP\MCP\Abilities\Site\PurgeCacheAbility;
+use WP\MCP\Abilities\Site\UpdateSiteSettingsAbility;
 use WP\MCP\Abilities\Support\AbilityRegistrar;
 use WP\MCP\Abilities\Support\ElementorSupport;
 use WP\MCP\Abilities\Support\PolylangSupport;
+use WP\MCP\Abilities\Support\RankMathSupport;
+use WP\MCP\Abilities\Support\RedirectionSupport;
 use WP\MCP\Abilities\Support\Settings;
 use WP\MCP\Abilities\Users\CreateUserAbility;
 use WP\MCP\Abilities\Users\DeleteUserAbility;
@@ -89,6 +106,7 @@ final class ContentAbilities {
 			SetPostTermsAbility::class,
 			SetPostMetaAbility::class,
 			UploadMediaAbility::class,
+			UpdateMediaAbility::class,
 		),
 		'menus'     => array(
 			ListMenusAbility::class,
@@ -118,6 +136,28 @@ final class ContentAbilities {
 			ListElementorTemplatesAbility::class,
 			GetElementorConditionsAbility::class,
 			SetElementorConditionsAbility::class,
+		),
+		'site'        => array(
+			GetSiteSettingsAbility::class,
+			UpdateSiteSettingsAbility::class,
+			PurgeCacheAbility::class,
+		),
+		'seo'         => array(
+			SeoGetPostsAbility::class,
+			SeoUpdatePostsAbility::class,
+			SeoGetSettingsAbility::class,
+			SeoUpdateSettingsAbility::class,
+		),
+		'redirects'   => array(
+			ListRedirectsAbility::class,
+			CreateRedirectsAbility::class,
+			UpdateRedirectAbility::class,
+			DeleteRedirectsAbility::class,
+		),
+		'custom_code' => array(
+			ListCustomCodeAbility::class,
+			GetCustomCodeAbility::class,
+			SetCustomCodeAbility::class,
 		),
 		'polylang'  => array(
 			ListLanguagesAbility::class,
@@ -242,6 +282,27 @@ final class ContentAbilities {
 	}
 
 	/**
+	 * Whether the site-wide abilities are registered on this site.
+	 *
+	 * Covers site settings, cache purging, Rank Math, Redirection and Elementor
+	 * Custom Code: everything that changes the whole site rather than one post.
+	 *
+	 * @return bool True when they should be registered.
+	 */
+	private static function site_tools_enabled(): bool {
+		/**
+		 * Filters whether the MCP site-wide abilities are registered.
+		 *
+		 * Defaults to the value set on the Meta MCP settings screen.
+		 *
+		 * @since 1.5.0
+		 *
+		 * @param bool $enabled Whether to register the site, SEO, redirect and custom code abilities.
+		 */
+		return (bool) apply_filters( 'mcp_adapter_site_abilities_enabled', Settings::site_tools_enabled() );
+	}
+
+	/**
 	 * Whether the content abilities are enabled on this site.
 	 *
 	 * @return bool True when they should be registered.
@@ -294,6 +355,22 @@ final class ContentAbilities {
 
 		if ( $register_inactive || PolylangSupport::is_active() ) {
 			$groups[] = 'polylang';
+		}
+
+		if ( self::site_tools_enabled() ) {
+			$groups[] = 'site';
+
+			if ( $register_inactive || RankMathSupport::is_active() ) {
+				$groups[] = 'seo';
+			}
+
+			if ( $register_inactive || RedirectionSupport::is_active() ) {
+				$groups[] = 'redirects';
+			}
+
+			if ( $register_inactive || ElementorSupport::is_pro_active() ) {
+				$groups[] = 'custom_code';
+			}
 		}
 
 		return $groups;
