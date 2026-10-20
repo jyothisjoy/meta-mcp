@@ -189,4 +189,32 @@ final class AbilityRegistrar {
 			'error_code' => (string) $error->get_error_code(),
 		);
 	}
+
+	/**
+	 * Builds a failure envelope whose message also carries the details.
+	 *
+	 * The MCP layer turns `{success: false, error}` into an error result that
+	 * holds the message text only, so anything else in the array (per-key
+	 * errors, the rules that were rejected) never reaches the client. The
+	 * details are therefore appended to the message as JSON, as well as kept
+	 * in the array for direct PHP callers.
+	 *
+	 * @param string               $message Summary of what went wrong.
+	 * @param string               $code    Error code.
+	 * @param array<string, mixed> $details Structured details.
+	 *
+	 * @return array<string, mixed> The failure envelope.
+	 */
+	public static function failure_with_details( string $message, string $code, array $details ): array {
+		$encoded = wp_json_encode( $details, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE );
+
+		return array_merge(
+			$details,
+			array(
+				'success'    => false,
+				'error'      => is_string( $encoded ) ? $message . "\n\nDetails: " . $encoded : $message,
+				'error_code' => $code,
+			)
+		);
+	}
 }

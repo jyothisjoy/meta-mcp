@@ -185,6 +185,36 @@ final class SettingsPage {
 					</tr>
 
 					<tr>
+						<th scope="row"><?php esc_html_e( 'User accounts', 'meta-mcp' ); ?></th>
+						<td>
+							<label>
+								<input type="checkbox"
+									name="<?php echo esc_attr( Settings::OPTION ); ?>[users_enabled]"
+									value="1" <?php checked( ! empty( $settings['users_enabled'] ) ); ?> />
+								<?php esc_html_e( 'Expose the tools for listing, creating, editing and deleting users', 'meta-mcp' ); ?>
+							</label>
+							<p class="description">
+								<?php esc_html_e( 'Off by default. Every call still needs the matching WordPress capability, and no tool can read or set a password — a new or locked-out account is reached by emailing its owner a link to set their own. Deleting a user is immediate and has no trash.', 'meta-mcp' ); ?>
+							</p>
+						</td>
+					</tr>
+
+					<tr>
+						<th scope="row"><?php esc_html_e( 'Site-wide tools', 'meta-mcp' ); ?></th>
+						<td>
+							<label>
+								<input type="checkbox"
+									name="<?php echo esc_attr( Settings::OPTION ); ?>[site_tools_enabled]"
+									value="1" <?php checked( ! empty( $settings['site_tools_enabled'] ) ); ?> />
+								<?php esc_html_e( 'Expose the tools for site settings, Rank Math SEO, Redirection rules, Elementor Custom Code and cache purging', 'meta-mcp' ); ?>
+							</label>
+							<p class="description">
+								<?php esc_html_e( 'These change the whole site rather than one post, so they have their own switch. Each still requires the capability the matching wp-admin screen needs, which by default only an administrator has; writing a Custom Code snippet also requires "Unfiltered HTML".', 'meta-mcp' ); ?>
+							</p>
+						</td>
+					</tr>
+
+					<tr>
 						<th scope="row"><?php esc_html_e( 'Writing', 'meta-mcp' ); ?></th>
 						<td>
 							<label>

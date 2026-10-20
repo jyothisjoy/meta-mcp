@@ -34,6 +34,15 @@ final class Settings {
 	 * the plugin did before this screen existed, and so a post type registered
 	 * later is picked up without anyone having to revisit the settings.
 	 *
+	 * `users_enabled` is the one default that is off. Managing user accounts is
+	 * a different kind of power from editing content, so a site has to switch it
+	 * on deliberately rather than acquire it by updating the plugin.
+	 *
+	 * `site_tools_enabled` covers the site-wide tools: General settings, Rank
+	 * Math settings and per-page SEO fields, Redirection rules, Elementor Custom
+	 * Code snippets and cache purging. Every one of them still requires the
+	 * capability an administrator would need for the same screen in wp-admin.
+	 *
 	 * @return array<string, mixed> The defaults.
 	 */
 	public static function defaults(): array {
@@ -42,6 +51,8 @@ final class Settings {
 			'post_types'            => array(),
 			'writes_enabled'        => true,
 			'menus_enabled'         => true,
+			'users_enabled'         => false,
+			'site_tools_enabled'    => true,
 		);
 	}
 
@@ -104,6 +115,28 @@ final class Settings {
 	}
 
 	/**
+	 * Whether the user abilities are enabled in the settings.
+	 *
+	 * @return bool True when the user tools should be registered.
+	 */
+	public static function users_enabled(): bool {
+		$settings = self::get();
+
+		return ! empty( $settings['users_enabled'] );
+	}
+
+	/**
+	 * Whether the site-wide tools (settings, SEO, redirects, custom code, cache) are enabled.
+	 *
+	 * @return bool True when those tools should be registered.
+	 */
+	public static function site_tools_enabled(): bool {
+		$settings = self::get();
+
+		return ! empty( $settings['site_tools_enabled'] );
+	}
+
+	/**
 	 * Validates a settings array submitted from the settings screen.
 	 *
 	 * @param mixed $input Raw submitted value.
@@ -124,6 +157,8 @@ final class Settings {
 			'post_types'            => array_values( array_intersect( $selectable, $submitted ) ),
 			'writes_enabled'        => ! empty( $input['writes_enabled'] ),
 			'menus_enabled'         => ! empty( $input['menus_enabled'] ),
+			'users_enabled'         => ! empty( $input['users_enabled'] ),
+			'site_tools_enabled'    => ! empty( $input['site_tools_enabled'] ),
 		);
 	}
 }

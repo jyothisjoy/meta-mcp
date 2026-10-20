@@ -618,12 +618,25 @@ final class ElementorSupport {
 		}
 
 		$template_type = (string) get_post_meta( $source_id, '_elementor_template_type', true );
+		$page_settings = get_post_meta( $source_id, '_elementor_page_settings', true );
 
+		$saved = self::save_elements( $target_id, $elements );
+
+		if ( is_wp_error( $saved ) ) {
+			return $saved;
+		}
+
+		// These have to be written after the elements, not before. Elementor's
+		// document API rewrites `_elementor_template_type` from the document
+		// instance it just saved, and Elementor Pro's theme documents drop any
+		// conditions that were not part of the save payload. Setting them first
+		// means a copied header or footer is stored as a plain document with no
+		// conditions, which Elementor then never renders — while the language
+		// it belongs to stops falling back to the source template, so the front
+		// end loses its header entirely.
 		if ( '' !== $template_type ) {
 			update_post_meta( $target_id, '_elementor_template_type', $template_type );
 		}
-
-		$page_settings = get_post_meta( $source_id, '_elementor_page_settings', true );
 
 		if ( ! empty( $page_settings ) ) {
 			update_post_meta( $target_id, '_elementor_page_settings', wp_slash( $page_settings ) );
@@ -631,7 +644,7 @@ final class ElementorSupport {
 
 		self::copy_display_conditions( $source_id, $target_id );
 
-		return self::save_elements( $target_id, $elements );
+		return $saved;
 	}
 
 	/**
@@ -651,24 +664,261 @@ final class ElementorSupport {
 	 * @return bool True when conditions were copied.
 	 */
 	public static function copy_display_conditions( int $source_id, int $target_id ): bool {
-		$conditions = get_post_meta( $source_id, '_elementor_conditions', true );
+		$conditions = self::get_conditions( $source_id );
 
 		if ( empty( $conditions ) ) {
 			return false;
 		}
 
-		if ( ! empty( get_post_meta( $target_id, '_elementor_conditions', true ) ) ) {
+		if ( ! empty( self::get_conditions( $target_id ) ) ) {
 			return false;
 		}
 
-		update_post_meta( $target_id, '_elementor_conditions', wp_slash( $conditions ) );
+		return true === self::set_conditions( $target_id, $conditions );
+	}
 
-		// Elementor caches the condition-to-template map in an option.
-		if ( class_exists( '\Elementor\Core\Base\Document' ) ) {
-			delete_option( 'elementor_pro_theme_builder_conditions' );
+	/**
+	 * Reads Elementor Pro's Theme Builder display conditions for a template.
+	 *
+	 * @param int $post_id Template ID.
+	 *
+	 * @return string[] Condition strings, e.g. `include/general`.
+	 */
+	public static function get_conditions( int $post_id ): array {
+		$conditions = get_post_meta( $post_id, '_elementor_conditions', true );
+
+		if ( ! is_array( $conditions ) ) {
+			return array();
+		}
+
+		return array_values( array_map( 'strval', $conditions ) );
+	}
+
+	/**
+	 * Writes Elementor Pro's Theme Builder display conditions for a template.
+	 *
+	 * Elementor decides which header, footer or archive template to render for a
+	 * request purely from these, so a template with none is never served and
+	 * whichever template does match keeps rendering in its place - on a
+	 * multilingual site, that is the source language's template.
+	 *
+	 * @param int      $post_id    Template ID.
+	 * @param string[] $conditions Condition strings. An empty array clears them.
+	 *
+	 * @return true|WP_Error True on success.
+	 */
+	public static function set_conditions( int $post_id, array $conditions ) {
+		$clean = self::clean_conditions( $conditions );
+
+		if ( is_wp_error( $clean ) ) {
+			return $clean;
+		}
+
+		if ( empty( $clean ) ) {
+			delete_post_meta( $post_id, '_elementor_conditions' );
+		} else {
+			update_post_meta( $post_id, '_elementor_conditions', wp_slash( $clean ) );
+		}
+
+		self::flush_conditions_cache();
+
+		return true;
+	}
+
+	/**
+	 * Validates and de-duplicates display condition strings.
+	 *
+	 * @param array<mixed> $conditions Condition strings.
+	 *
+	 * @return string[]|\WP_Error The clean conditions.
+	 */
+	public static function clean_conditions( array $conditions ) {
+		$clean = array();
+
+		foreach ( $conditions as $condition ) {
+			if ( ! is_string( $condition ) && ! is_numeric( $condition ) ) {
+				return new WP_Error( 'invalid_condition', 'Each display condition must be a string.' );
+			}
+
+			$condition = trim( (string) $condition );
+
+			if ( '' === $condition ) {
+				continue;
+			}
+
+			if ( ! preg_match( '#^(include|exclude)(/[A-Za-z0-9_\-]+)+$#', $condition ) ) {
+				return new WP_Error(
+					'invalid_condition',
+					sprintf( 'Display condition "%s" is malformed. Expected e.g. "include/general" or "include/singular/page/12".', $condition )
+				);
+			}
+
+			$clean[] = $condition;
+		}
+
+		return array_values( array_unique( $clean ) );
+	}
+
+	/**
+	 * Rewrites the post and term ids inside display conditions for a language.
+	 *
+	 * A condition that names a specific post or term - `include/singular/page/9115`
+	 * - only ever matches that one object, so copying it verbatim onto a
+	 * translated template gives that template a condition it can never satisfy.
+	 * Conditions that name no id, such as `include/general` or
+	 * `include/singular/facility`, are language-agnostic and pass through.
+	 *
+	 * The trailing id is resolved by looking it up rather than by parsing
+	 * Elementor's condition grammar: a numeric tail that is a post is mapped as a
+	 * post, one that is a term is mapped as a term, and anything else is left
+	 * alone. An object with no translation in the target language is also left
+	 * alone, so the caller can see the untranslated id in the result.
+	 *
+	 * @param string[] $conditions Condition strings.
+	 * @param string   $language   Target language slug.
+	 *
+	 * @return string[] Conditions with ids remapped where possible.
+	 */
+	public static function remap_conditions( array $conditions, string $language ): array {
+		if ( ! PolylangSupport::is_active() ) {
+			return array_values( array_map( 'strval', $conditions ) );
+		}
+
+		$remapped = array();
+
+		foreach ( $conditions as $condition ) {
+			$condition = (string) $condition;
+			$parts     = explode( '/', $condition );
+			$tail      = end( $parts );
+
+			if ( ! ctype_digit( (string) $tail ) ) {
+				$remapped[] = $condition;
+				continue;
+			}
+
+			$id         = (int) $tail;
+			$owner      = count( $parts ) >= 2 ? $parts[ count( $parts ) - 2 ] : '';
+			$translated = 0;
+
+			if ( self::condition_id_is_term( $owner, $id ) ) {
+				$translated = PolylangSupport::get_translated_term( $id, $language );
+			} elseif ( get_post_type( $id ) ) {
+				$translated = PolylangSupport::get_translated_post( $id, $language );
+			}
+
+			if ( $translated > 0 && $translated !== $id ) {
+				array_pop( $parts );
+				$parts[]    = (string) $translated;
+				$remapped[] = implode( '/', $parts );
+				continue;
+			}
+
+			$remapped[] = $condition;
+		}
+
+		return $remapped;
+	}
+
+	/**
+	 * Whether the trailing id of a display condition names a term rather than a post.
+	 *
+	 * Elementor spells taxonomy conditions with the taxonomy in the segment
+	 * before the id - `singular/in_category/5`, `archive/taxonomy/48` - so that
+	 * segment decides it. When it says nothing either way the id is looked up,
+	 * posts first, because a bare id is far more often a post.
+	 *
+	 * @param string $owner The condition segment preceding the id.
+	 * @param int    $id    The id itself.
+	 *
+	 * @return bool True when the id should be translated as a term.
+	 */
+	private static function condition_id_is_term( string $owner, int $id ): bool {
+		if ( 0 === strpos( $owner, 'in_' ) || in_array( $owner, array( 'taxonomy', 'term', 'tax' ), true ) ) {
+			return true;
+		}
+
+		if ( '' !== $owner && taxonomy_exists( $owner ) ) {
+			return true;
+		}
+
+		if ( '' !== $owner && ( post_type_exists( $owner ) || 'child_of' === $owner ) ) {
+			return false;
+		}
+
+		if ( get_post_type( $id ) ) {
+			return false;
+		}
+
+		return get_term( $id ) instanceof \WP_Term;
+	}
+
+	/**
+	 * Rebuilds Elementor Pro's cached condition-to-template map.
+	 *
+	 * Elementor Pro reads which template serves each location (header, footer,
+	 * archive, Custom Code head/body) only from the `elementor_pro_theme_builder_conditions`
+	 * option, and never rebuilds it on its own when it is missing. Deleting the
+	 * option therefore switches off every Elementor header, footer and
+	 * conditioned snippet until someone next saves a template in wp-admin. So
+	 * the cache is regenerated through Elementor Pro's own class, exactly as its
+	 * conditions editor does after a save.
+	 *
+	 * When Elementor Pro is not loaded there is nothing reading the option, so
+	 * it is left alone.
+	 *
+	 * @return bool True when the cache was regenerated.
+	 */
+	public static function flush_conditions_cache(): bool {
+		$manager = self::conditions_manager();
+
+		if ( ! $manager || ! method_exists( $manager, 'get_cache' ) ) {
+			return false;
+		}
+
+		try {
+			$cache = $manager->get_cache();
+
+			if ( ! is_object( $cache ) || ! method_exists( $cache, 'regenerate' ) ) {
+				return false;
+			}
+
+			$cache->regenerate();
+		} catch ( \Throwable $e ) {
+			return false;
 		}
 
 		return true;
+	}
+
+	/**
+	 * Returns Elementor Pro's Theme Builder conditions manager, when loaded.
+	 *
+	 * @return object|null The conditions manager.
+	 */
+	public static function conditions_manager(): ?object {
+		if ( ! class_exists( '\ElementorPro\Plugin' ) ) {
+			return null;
+		}
+
+		try {
+			$plugin = \ElementorPro\Plugin::instance();
+
+			if ( ! isset( $plugin->modules_manager ) || ! is_object( $plugin->modules_manager ) ) {
+				return null;
+			}
+
+			$theme_builder = $plugin->modules_manager->get_modules( 'theme-builder' );
+
+			if ( ! is_object( $theme_builder ) || ! method_exists( $theme_builder, 'get_conditions_manager' ) ) {
+				return null;
+			}
+
+			$manager = $theme_builder->get_conditions_manager();
+
+			return is_object( $manager ) ? $manager : null;
+		} catch ( \Throwable $e ) {
+			return null;
+		}
 	}
 
 	/**

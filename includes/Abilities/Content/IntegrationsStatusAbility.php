@@ -13,7 +13,12 @@ use WP\MCP\Abilities\Support\AbilityRegistrar;
 use WP\MCP\Abilities\Support\ContentSupport;
 use WP\MCP\Abilities\Support\ElementorSupport;
 use WP\MCP\Abilities\Support\MenuSupport;
+use WP\MCP\Abilities\Support\CustomCodeSupport;
 use WP\MCP\Abilities\Support\PolylangSupport;
+use WP\MCP\Abilities\Support\RankMathSupport;
+use WP\MCP\Abilities\Support\RedirectionSupport;
+use WP\MCP\Abilities\Support\Settings;
+use WP\MCP\Abilities\Support\UserSupport;
 
 // Exit if accessed directly.
 defined( 'ABSPATH' ) || exit;
@@ -37,7 +42,7 @@ final class IntegrationsStatusAbility {
 			'content-integrations-status',
 			array(
 				'label'               => 'Content Integrations Status',
-				'description'         => 'Report what this WordPress site supports: whether Elementor, Elementor Pro, Polylang and Polylang Pro are active and at which versions, whether MCP content writing is enabled, what navigation menus and theme menu locations exist, and what the current user is allowed to do. Call this first to find out which content abilities will work here.',
+				'description'         => 'Report what this WordPress site supports: whether Elementor, Elementor Pro, Polylang and Polylang Pro are active and at which versions, whether MCP content writing is enabled, whether the user abilities are switched on and which roles exist, what navigation menus and theme menu locations exist, whether the site-wide tools are on and which of Rank Math SEO, the Redirection plugin, Elementor Custom Code and a page cache plugin are present, and what the current user is allowed to do. Call this first to find out which content abilities will work here.',
 				'input_schema'        => array(
 					'type'       => 'object',
 					'properties' => array(),
@@ -49,8 +54,10 @@ final class IntegrationsStatusAbility {
 						'plugin_version' => array( 'type' => 'string' ),
 						'wordpress'    => array( 'type' => 'object' ),
 						'menus'        => array( 'type' => 'object' ),
+						'users'        => array( 'type' => 'object' ),
 						'elementor'    => array( 'type' => 'object' ),
 						'polylang'     => array( 'type' => 'object' ),
+						'site_tools'   => array( 'type' => 'object' ),
 						'permissions'  => array( 'type' => 'object' ),
 						'writes_enabled' => array( 'type' => 'boolean' ),
 					),
@@ -93,6 +100,17 @@ final class IntegrationsStatusAbility {
 				'navigation_posts'   => MenuSupport::navigation_posts(),
 				'can_manage'         => current_user_can( MenuSupport::MANAGE_CAPABILITY ),
 			),
+			'users'          => array(
+				'enabled'        => Settings::users_enabled(),
+				'roles'          => UserSupport::role_slugs(),
+				'default_role'   => (string) get_option( 'default_role' ),
+				'can_list'       => current_user_can( 'list_users' ),
+				'can_create'     => current_user_can( 'create_users' ),
+				'can_promote'    => current_user_can( 'promote_users' ),
+				'can_delete'     => current_user_can( 'delete_users' ),
+				'multisite'      => is_multisite(),
+				'password_note'  => 'No ability reads or sets a password. A new or locked-out account is reached by emailing its owner a link to set their own.',
+			),
 			'elementor'      => array(
 				'active'               => ElementorSupport::is_active(),
 				'pro_active'           => ElementorSupport::is_pro_active(),
@@ -108,6 +126,21 @@ final class IntegrationsStatusAbility {
 				'default_language'  => function_exists( 'pll_default_language' ) ? (string) pll_default_language( 'slug' ) : '',
 				'synchronised_fields' => PolylangSupport::sync_settings(),
 			),
+			'site_tools'     => array(
+				'enabled'             => Settings::site_tools_enabled(),
+				'rank_math'           => array(
+					'active'  => RankMathSupport::is_active(),
+					'version' => RankMathSupport::version(),
+				),
+				'redirection'         => array(
+					'active'  => RedirectionSupport::is_active(),
+					'version' => RedirectionSupport::version(),
+				),
+				'custom_code'         => CustomCodeSupport::is_available(),
+				'page_cache'          => self::page_caches(),
+				'can_manage_options'  => current_user_can( 'manage_options' ),
+				'can_unfiltered_html' => current_user_can( 'unfiltered_html' ),
+			),
 			'permissions'    => array(
 				'user_id'         => (int) $user->ID,
 				'user_login'      => $user->user_login,
@@ -118,7 +151,25 @@ final class IntegrationsStatusAbility {
 				'can_upload'      => current_user_can( 'upload_files' ),
 				'can_manage_terms' => current_user_can( 'manage_categories' ),
 				'can_manage_menus' => current_user_can( MenuSupport::MANAGE_CAPABILITY ),
+				'can_manage_users' => current_user_can( 'edit_users' ),
 			),
 		);
+	}
+
+	/**
+	 * Lists the page cache plugins purge-cache knows how to clear.
+	 *
+	 * @return string[] Cache plugin slugs.
+	 */
+	private static function page_caches(): array {
+		$caches = array(
+			'litespeed'      => defined( 'LSCWP_V' ),
+			'wp-rocket'      => function_exists( 'rocket_clean_domain' ),
+			'w3-total-cache' => function_exists( 'w3tc_flush_all' ),
+			'wp-super-cache' => function_exists( 'wp_cache_clear_cache' ),
+			'siteground'     => function_exists( 'sg_cachepress_purge_cache' ),
+		);
+
+		return array_keys( array_filter( $caches ) );
 	}
 }

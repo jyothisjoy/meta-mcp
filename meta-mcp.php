@@ -20,7 +20,7 @@
  * @wordpress-plugin
  * Plugin Name:       Meta MCP
  * Description:       Model Context Protocol server for WordPress. Exposes abilities as MCP tools, and adds content, navigation menu, Elementor and Polylang editing and publishing tools.
- * Version:           1.3.0
+ * Version:           1.5.0
  * Requires at least: 6.9
  * Tested up to:      7.0
  * Requires PHP:      7.4
@@ -50,7 +50,7 @@ function constants(): void {
 	/**
 	 * Version of the plugin.
 	 */
-	define( 'META_MCP_VERSION', '1.3.0' );
+	define( 'META_MCP_VERSION', '1.5.0' );
 
 	/**
 	 * Version of the upstream MCP Adapter this fork is based on.
@@ -66,10 +66,12 @@ constants();
 require_once __DIR__ . '/includes/Updater.php';
 Updater::register( __FILE__ );
 
-require_once __DIR__ . '/includes/Autoloader.php';
+// Not the upstream `Autoloader` class: the official MCP Adapter plugin declares
+// that name too, and loading both is a fatal error. See MetaMcpAutoloader.
+require_once __DIR__ . '/includes/MetaMcpAutoloader.php';
 
 // If autoloader failed, we cannot proceed.
-if ( ! Autoloader::autoload() ) {
+if ( ! MetaMcpAutoloader::autoload() ) {
 	return;
 }
 
@@ -77,6 +79,10 @@ if ( ! Autoloader::autoload() ) {
 // classmap, so register a PSR-4 fallback for them before the plugin boots.
 require_once __DIR__ . '/includes/Abilities/Support/ExtensionAutoloader.php';
 Abilities\Support\ExtensionAutoloader::register();
+
+// Keep the shared adapter classes on the newest bundled copy, even when a
+// plugin that loads later (Rank Math) registers an older one in front.
+Abilities\Support\AdapterClassGuard::register();
 
 // Load the plugin.
 if ( class_exists( Plugin::class ) ) {
