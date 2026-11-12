@@ -627,4 +627,93 @@ final class RankMathSupport {
 			),
 		);
 	}
+
+	/**
+	 * Clears Rank Math's sitemap cache so every sitemap is rebuilt on its next request.
+	 *
+	 * Rank Math builds sitemaps on demand and caches each one; after posts are
+	 * unpublished, redirected or noindexed outside its own screens the cache
+	 * can keep listing them. Its own cache classes are used when present - the
+	 * method names differ between Rank Math versions, so each is tried - and
+	 * its sitemap transients are removed as a fallback.
+	 *
+	 * @param string[] $types Sitemap types to clear, e.g. "page", "offer"; empty for all.
+	 *
+	 * @return string[] What was cleared, for the response.
+	 */
+	public static function flush_sitemap_cache( array $types = array() ): array {
+		$done      = array();
+		$callables = array(
+			array( '\RankMath\Sitemap\Cache', 'invalidate_storage' ),
+			array( '\RankMath\Sitemap\Cache_Watcher', 'clear' ),
+			array( '\RankMath\Sitemap\Cache', 'clear' ),
+		);
+
+		foreach ( $callables as $callable ) {
+			if ( ! is_callable( $callable ) ) {
+				continue;
+			}
+
+			try {
+				if ( 'invalidate_storage' === $callable[1] && ! empty( $types ) ) {
+					foreach ( $types as $type ) {
+						call_user_func( $callable, $type );
+					}
+				} elseif ( 'invalidate_storage' === $callable[1] ) {
+					call_user_func( $callable );
+				} else {
+					call_user_func( $callable, $types );
+				}
+
+				$done[] = ltrim( $callable[0], '\\' ) . '::' . $callable[1];
+			} catch ( \Throwable $e ) {
+				unset( $e );
+			}
+		}
+
+		if ( empty( $done ) ) {
+			global $wpdb;
+
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Fallback when Rank Math exposes no cache API.
+			$deleted = (int) $wpdb->query(
+				$wpdb->prepare(
+					"DELETE FROM {$wpdb->options} WHERE option_name LIKE %s OR option_name LIKE %s",
+					$wpdb->esc_like( '_transient_rank_math_sitemap' ) . '%',
+					$wpdb->esc_like( '_transient_timeout_rank_math_sitemap' ) . '%'
+				)
+			);
+
+			$done[] = sprintf( 'deleted %d sitemap transients', $deleted );
+		}
+
+		/**
+		 * Fires after the MCP sitemap regeneration has cleared Rank Math's cache.
+		 *
+		 * Hook this to clear a CDN or proxy copy of the sitemaps.
+		 *
+		 * @since 1.6.0
+		 *
+		 * @param string[] $types The sitemap types cleared, or empty for all.
+		 */
+		do_action( 'mcp_adapter_sitemap_flushed', $types );
+
+		return $done;
+	}
+
+	/**
+	 * Returns the URL of Rank Math's sitemap index.
+	 *
+	 * @return string The index URL.
+	 */
+	public static function sitemap_index_url(): string {
+		if ( is_callable( array( '\RankMath\Sitemap\Router', 'get_base_url' ) ) ) {
+			try {
+				return (string) \RankMath\Sitemap\Router::get_base_url( 'sitemap_index.xml' );
+			} catch ( \Throwable $e ) {
+				unset( $e );
+			}
+		}
+
+		return (string) home_url( '/sitemap_index.xml' );
+	}
 }

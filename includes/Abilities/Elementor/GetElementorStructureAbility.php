@@ -36,7 +36,7 @@ final class GetElementorStructureAbility {
 			'elementor-get-structure',
 			array(
 				'label'               => 'Get Elementor Structure',
-				'description'         => 'Read the Elementor layout of a page as a flat list of elements, each with its element id, type, nesting depth and a preview of its text. This is the recommended way to inspect an Elementor page before editing: find the element you want in this list, then pass its id to elementor-update-element.',
+				'description'         => 'Read the Elementor layout of a page as a flat list of elements, each with its element id, type, nesting depth and a preview of its text. This is the recommended way to inspect an Elementor page before editing: find the element you want in this list, then pass its id to elementor-update-element. To locate an element by the text it contains, across all pages and templates at once, use find-text instead.',
 				'input_schema'        => array(
 					'type'       => 'object',
 					'properties' => array(

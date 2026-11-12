@@ -156,6 +156,40 @@ final class ElementorSupport {
 			return new WP_Error( 'post_not_found', sprintf( 'No post found with ID %d.', $post_id ) );
 		}
 
+		// A header, footer or other Theme Builder template is only rendered while
+		// it keeps its template type and display conditions, and Elementor Pro's
+		// theme documents can drop conditions that are not part of the save
+		// payload. Remember both, and put them back if the save lost them.
+		$template_type = (string) get_post_meta( $post_id, '_elementor_template_type', true );
+		$conditions    = self::get_conditions( $post_id );
+
+		$saved = self::save_elements_via_document( $post_id, $elements, $post->post_type );
+
+		if ( is_wp_error( $saved ) ) {
+			return $saved;
+		}
+
+		if ( '' !== $template_type && (string) get_post_meta( $post_id, '_elementor_template_type', true ) !== $template_type ) {
+			update_post_meta( $post_id, '_elementor_template_type', $template_type );
+		}
+
+		if ( ! empty( $conditions ) && self::get_conditions( $post_id ) !== $conditions ) {
+			self::set_conditions( $post_id, $conditions );
+		}
+
+		return true;
+	}
+
+	/**
+	 * Writes the elements through Elementor's document API, or manually.
+	 *
+	 * @param int               $post_id   Post ID.
+	 * @param array<int, mixed> $elements  Element tree.
+	 * @param string            $post_type Post type slug.
+	 *
+	 * @return true|\WP_Error True on success, WP_Error otherwise.
+	 */
+	private static function save_elements_via_document( int $post_id, array $elements, string $post_type ) {
 		if ( class_exists( '\Elementor\Plugin' ) && isset( \Elementor\Plugin::$instance->documents ) ) {
 			$document = \Elementor\Plugin::$instance->documents->get( $post_id );
 
@@ -169,17 +203,17 @@ final class ElementorSupport {
 					// `_elementor_edit_mode`, the data is stored but the front end
 					// silently renders nothing, so assert the companion metas here
 					// rather than trusting the document to have done it.
-					self::ensure_builder_meta( $post_id, $post->post_type );
+					self::ensure_builder_meta( $post_id, $post_type );
 
 					return true;
 				} catch ( \Throwable $e ) {
 					// Fall through to the manual write below.
-					return self::save_elements_manually( $post_id, $elements, $post->post_type, $e->getMessage() );
+					return self::save_elements_manually( $post_id, $elements, $post_type, $e->getMessage() );
 				}
 			}
 		}
 
-		return self::save_elements_manually( $post_id, $elements, $post->post_type );
+		return self::save_elements_manually( $post_id, $elements, $post_type );
 	}
 
 	/**
@@ -237,6 +271,10 @@ final class ElementorSupport {
 		}
 
 		self::regenerate_css( $post_id );
+
+		// Elementor's element cache keeps rendered widget HTML; the document API
+		// clears it on save, a manual write has to do it itself.
+		delete_post_meta( $post_id, '_elementor_element_cache' );
 
 		return true;
 	}
@@ -746,10 +784,16 @@ final class ElementorSupport {
 				continue;
 			}
 
+			$condition = self::resolve_url_condition( $condition );
+
+			if ( is_wp_error( $condition ) ) {
+				return $condition;
+			}
+
 			if ( ! preg_match( '#^(include|exclude)(/[A-Za-z0-9_\-]+)+$#', $condition ) ) {
 				return new WP_Error(
 					'invalid_condition',
-					sprintf( 'Display condition "%s" is malformed. Expected e.g. "include/general" or "include/singular/page/12".', $condition )
+					sprintf( 'Display condition "%s" is malformed. Expected e.g. "include/general", "include/singular/page/12", a page URL, or "exclude:" followed by a page URL.', $condition )
 				);
 			}
 
@@ -757,6 +801,59 @@ final class ElementorSupport {
 		}
 
 		return array_values( array_unique( $clean ) );
+	}
+
+	/**
+	 * Turns a condition given as a page URL into Elementor's own form.
+	 *
+	 * Elementor only understands conditions by post id, but audits and crawls
+	 * name pages by URL. Accepted forms, each resolved to
+	 * `include/singular/<post_type>/<id>` (or `exclude/...`):
+	 *
+	 * - `https://example.com/room/deluxe/` or `/room/deluxe/` — include that page;
+	 * - `include:https://...`, `exclude:/room/deluxe/` — explicit mode;
+	 * - `include/https://...`, `exclude//room/deluxe/` — the same, written like a condition.
+	 *
+	 * Anything else is returned untouched for the normal validation.
+	 *
+	 * @param string $condition Raw condition.
+	 *
+	 * @return string|\WP_Error The condition in Elementor's form.
+	 */
+	private static function resolve_url_condition( string $condition ) {
+		$mode   = 'include';
+		$target = $condition;
+
+		// "include/singular/page/12" also matches the pattern, but its remainder
+		// is not a URL, so it falls through untouched.
+		if ( preg_match( '#^(include|exclude)\s*[:/]\s*(.+)$#i', $condition, $m ) && UrlSupport::looks_like_url( trim( $m[2] ) ) ) {
+			$mode   = strtolower( $m[1] );
+			$target = trim( $m[2] );
+		}
+
+		if ( ! UrlSupport::looks_like_url( $target ) ) {
+			return $condition;
+		}
+
+		$resolved = UrlSupport::resolve( $target );
+
+		if ( is_wp_error( $resolved ) ) {
+			return new WP_Error(
+				'condition_url_not_resolved',
+				sprintf( 'Display condition "%s" names a URL that could not be matched to a post: %s', $condition, $resolved->get_error_message() )
+			);
+		}
+
+		if ( empty( $resolved['post_id'] ) ) {
+			// A blog-style homepage.
+			return 'exclude' === $mode ? 'exclude/singular/front_page' : (string) $resolved['condition'];
+		}
+
+		if ( ! empty( $resolved['is_front'] ) && 'include/singular/front_page' === $resolved['condition'] ) {
+			return 'exclude' === $mode ? 'exclude/singular/front_page' : 'include/singular/front_page';
+		}
+
+		return UrlSupport::condition_for_post( (int) $resolved['post_id'], $mode );
 	}
 
 	/**

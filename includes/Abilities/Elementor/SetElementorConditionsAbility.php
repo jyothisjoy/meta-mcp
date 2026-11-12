@@ -48,7 +48,7 @@ final class SetElementorConditionsAbility {
 						'conditions'         => array(
 							'type'        => 'array',
 							'items'       => array( 'type' => 'string' ),
-							'description' => 'Condition strings, each "include/..." or "exclude/...". Replaces whatever the template had. An empty array clears them.',
+							'description' => 'Condition strings, each "include/..." or "exclude/...", or a page URL/path (optionally prefixed "include:" or "exclude:") that is resolved to its post id. Replaces whatever the template had. An empty array clears them.',
 						),
 						'copy_from_post_id'  => array(
 							'type'        => 'integer',

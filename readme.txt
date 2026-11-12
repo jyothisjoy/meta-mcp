@@ -4,7 +4,7 @@ Tags:              mcp, ai, abilities-api, model-context-protocol, menus, elemen
 Requires at least: 6.9
 Tested up to:      7.0
 Requires PHP:      7.4
-Stable tag:        1.5.0
+Stable tag:        1.6.0
 License:           GPL-2.0-or-later
 License URI:       https://spdx.org/licenses/GPL-2.0-or-later.html
 
@@ -27,14 +27,15 @@ This plugin is not distributed through WordPress.org. Its `Update URI` points at
 
 **Content editing (added in this fork):**
 
-A second MCP server at `/wp-json/mcp/wp-content` exposes 54 first-class tools:
+A second MCP server at `/wp-json/mcp/wp-content` exposes 61 first-class tools:
 
-* **Content** – Query, read, create, update, publish, schedule and delete posts of any post type, plus taxonomy terms, custom fields, media uploads and media alt text, titles and captions.
+* **Content** – Query, read, create, update, publish, schedule and delete posts of any post type, plus taxonomy terms, custom fields, media uploads and media alt text, titles and captions (with a "missing alt text" listing). Resolve page URLs to post ids.
+* **Find and replace** – Find text wherever it is stored - post fields, Elementor widgets on pages and in shared header/footer templates, Custom Code snippets, menu items - and replace it in one call, with a dry run and a phone-number mode that matches every formatting, including `tel:` links.
 * **Users** – List, read, create, edit and delete user accounts, with roles and profile fields. Switched off by default, and no tool ever reads or sets a password.
 * **Navigation menus** – List and read the site's menus as a nested tree, create and rename them, add, edit, move and remove individual items, write a whole menu structure in one call, and assign menus to the theme's locations. Items may point at a page, post, category, tag, post type archive or a custom URL, and every target is checked before it is written.
 * **Elementor** – Read a layout as a flat, id-addressable list; patch individual widgets by element id; or read and replace the whole element tree. Writes route through Elementor's document API so the generated CSS and companion metas stay consistent.
 * **Polylang and Polylang Pro** – Languages, per-post language assignment, linking translations, creating a translation that carries over terms, meta and the Elementor layout, term translations, and on-demand structure sync.
-* **Rank Math SEO** – Read and write per-page SEO titles, descriptions, canonicals and robots on up to 100 posts in one call, find pages whose own robots or canonical override the site defaults, and change the Titles & Meta, Sitemap and General settings.
+* **Rank Math SEO** – Read and write per-page SEO titles, descriptions, canonicals and robots on up to 100 posts in one call, find pages whose own robots or canonical override the site defaults, and change the Titles & Meta, Sitemap and General settings, and regenerate the XML sitemaps.
 * **Redirection** – List, create (singly or in bulk, exact or regex, 301/302/307/308 or 410), edit, enable, disable and delete redirect rules.
 * **Elementor Custom Code** – List, read, create and edit Elementor Pro Custom Code snippets, including their code, location, priority and display conditions.
 * **Site** – Read and change the Site Title, Tagline, homepage and other General/Reading settings from a fixed allowlist, and purge the page cache (LiteSpeed, WP Rocket, W3 Total Cache, WP Super Cache, SiteGround) and Elementor's CSS.
@@ -70,6 +71,17 @@ Yes. Those classic menus have their own set of tools, because a menu item stores
 No. The content tools work on any WordPress site. The Elementor and Polylang tools activate only when those plugins are present; call the `content-integrations-status` tool to see what a given site supports.
 
 == Changelog ==
+
+= 1.6.0 =
+* Added `find-text` and `replace-text`, which find and replace text wherever it is stored: post titles, excerpts and content; every text, link and repeater setting of every Elementor widget, on pages and in Elementor templates (headers, footers, global widgets, popups); Elementor Custom Code snippets; and menu item labels and custom link URLs. Each match reports the post, field, Elementor element id, widget type and setting path (e.g. `icon_list.2.text`), with context, and flags matches in templates, snippets and menus as shared by many pages. `update-post` could not do this, because on an Elementor page the visible text is not in `post_content`, and `elementor-update-element` needed the element id first.
+* `match_mode: "phone"` matches a phone number however it is written - spaces, dashes, dots, non-breaking spaces, a "(0)" trunk prefix, "00" or "+", URL-encoded - including inside `tel:` and WhatsApp links. Compact matches (links, schema) are rewritten in compact form, formatted ones as the replacement is written. A partial number is never matched inside a longer one.
+* `replace-text` has a dry run, can be limited by post ids, post types or Polylang language, changes at most 200 posts per call and says when more remain, and purges the page cache afterwards (the whole site, plus Elementor's element cache, when a shared template, snippet or menu changed). Elementor data is written through Elementor's document API, post fields through `wp_update_post`, so revisions are kept. Posts switched back from Elementor to the WordPress editor are left alone. Custom Code and menus follow the site-wide tools and menu tools switches, and their capabilities.
+* Added `resolve-url`, which turns up to 100 page URLs or paths into post ids, post types, languages and the Elementor display condition that targets each page. Matches are confirmed against the post's own permalink, which also fixes Polylang sites where `url_to_postid()` returns the same slug in another language.
+* Display conditions in `elementor-set-custom-code` and `elementor-set-conditions` may now be given as page URLs or paths, optionally prefixed `include:` or `exclude:`; they are resolved to `include/singular/<post_type>/<id>`. A URL that matches no post is refused with an explanation instead of a "malformed condition" error.
+* Added `seo-regenerate-sitemap`, which clears Rank Math's sitemap cache (all sitemaps or given types), fetches the index and sitemaps so they are rebuilt at once, reports how many URLs each lists, and checks whether given URLs are, or are no longer, listed. Optionally flushes rewrite rules.
+* Added `list-media`, which pages through the media library with a `missing_alt` filter, returning each image's URL, file name, title, caption, size and the post it was uploaded to: the input for bulk alt text with `update-media`.
+* Fixed: saving an Elementor template through MCP (`elementor-set-data`, `elementor-update-element`, `replace-text`) could leave a header or footer without its display conditions or template type, because Elementor Pro's theme documents drop conditions not in the save payload. Both are now restored after every save when they were lost.
+* `update-post` and `elementor-get-structure` now point to `replace-text` and `find-text` for text inside Elementor layouts and templates.
 
 = 1.5.0 =
 * Added Rank Math abilities. `seo-get-posts` reads a post's SEO title, description, focus keyword, canonical, robots and social fields, plus what Rank Math will actually print and where it comes from; its filters find posts whose own robots or canonical override the site default. `seo-update-posts` writes those fields on up to 100 posts in one call, with a dry run, and never half-updates a post. Clearing `canonical_url` makes a page canonical to itself; clearing `robots` hands it back to the post type default. `seo-get-settings` and `seo-update-settings` read and change the Titles & Meta, Sitemap and General screens, refuse unknown keys so typos are caught, and save nothing if any key is refused.

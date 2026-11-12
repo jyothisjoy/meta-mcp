@@ -11,10 +11,14 @@ namespace WP\MCP\Abilities;
 
 use WP\MCP\Abilities\Content\CreatePostAbility;
 use WP\MCP\Abilities\Content\DeletePostAbility;
+use WP\MCP\Abilities\Content\FindTextAbility;
 use WP\MCP\Abilities\Content\GetPostAbility;
 use WP\MCP\Abilities\Content\IntegrationsStatusAbility;
+use WP\MCP\Abilities\Content\ListMediaAbility;
 use WP\MCP\Abilities\Content\ListPostsAbility;
 use WP\MCP\Abilities\Content\ListPostTypesAbility;
+use WP\MCP\Abilities\Content\ReplaceTextAbility;
+use WP\MCP\Abilities\Content\ResolveUrlAbility;
 use WP\MCP\Abilities\Content\SetPostMetaAbility;
 use WP\MCP\Abilities\Content\SetPostStatusAbility;
 use WP\MCP\Abilities\Content\SetPostTermsAbility;
@@ -55,6 +59,7 @@ use WP\MCP\Abilities\Redirects\ListRedirectsAbility;
 use WP\MCP\Abilities\Redirects\UpdateRedirectAbility;
 use WP\MCP\Abilities\Seo\SeoGetPostsAbility;
 use WP\MCP\Abilities\Seo\SeoGetSettingsAbility;
+use WP\MCP\Abilities\Seo\SeoRegenerateSitemapAbility;
 use WP\MCP\Abilities\Seo\SeoUpdatePostsAbility;
 use WP\MCP\Abilities\Seo\SeoUpdateSettingsAbility;
 use WP\MCP\Abilities\Site\GetSiteSettingsAbility;
@@ -99,6 +104,9 @@ final class ContentAbilities {
 			ListPostTypesAbility::class,
 			ListPostsAbility::class,
 			GetPostAbility::class,
+			ResolveUrlAbility::class,
+			FindTextAbility::class,
+			ReplaceTextAbility::class,
 			CreatePostAbility::class,
 			UpdatePostAbility::class,
 			SetPostStatusAbility::class,
@@ -106,6 +114,7 @@ final class ContentAbilities {
 			SetPostTermsAbility::class,
 			SetPostMetaAbility::class,
 			UploadMediaAbility::class,
+			ListMediaAbility::class,
 			UpdateMediaAbility::class,
 		),
 		'menus'     => array(
@@ -147,6 +156,7 @@ final class ContentAbilities {
 			SeoUpdatePostsAbility::class,
 			SeoGetSettingsAbility::class,
 			SeoUpdateSettingsAbility::class,
+			SeoRegenerateSitemapAbility::class,
 		),
 		'redirects'   => array(
 			ListRedirectsAbility::class,
@@ -245,7 +255,7 @@ final class ContentAbilities {
 	 *
 	 * @return bool True when they should be registered.
 	 */
-	private static function menus_enabled(): bool {
+	public static function menus_enabled(): bool {
 		/**
 		 * Filters whether the MCP navigation menu abilities are registered.
 		 *
@@ -289,7 +299,7 @@ final class ContentAbilities {
 	 *
 	 * @return bool True when they should be registered.
 	 */
-	private static function site_tools_enabled(): bool {
+	public static function site_tools_enabled(): bool {
 		/**
 		 * Filters whether the MCP site-wide abilities are registered.
 		 *
