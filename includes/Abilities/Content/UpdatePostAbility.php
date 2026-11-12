@@ -41,7 +41,7 @@ final class UpdatePostAbility {
 			'update-post',
 			array(
 				'label'               => 'Update Post',
-				'description'         => 'Edit an existing post of any post type. Only the fields you pass are changed; everything else is left alone. Can update content, status, taxonomy terms, custom fields, featured image, page template, Polylang language and Elementor layout in one call.',
+				'description'         => 'Edit an existing post of any post type. Only the fields you pass are changed; everything else is left alone. Can update content, status, taxonomy terms, custom fields, featured image, page template, Polylang language and Elementor layout in one call. "content" replaces the whole post_content; on a page built with Elementor the visible text is not in post_content at all - to change a phrase or phone number there, or in a header/footer template, use replace-text.',
 				'input_schema'        => array(
 					'type'       => 'object',
 					'properties' => $properties,

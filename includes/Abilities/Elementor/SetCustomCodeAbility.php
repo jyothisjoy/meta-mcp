@@ -31,7 +31,7 @@ final class SetCustomCodeAbility {
 			'elementor-set-custom-code',
 			array(
 				'label'               => 'Set Elementor Custom Code',
-				'description'         => 'Create an Elementor → Custom Code snippet, or change an existing one by post_id. Only the fields you pass change. Use it to replace a schema JSON-LD block, move a pixel to the body, or limit a snippet to certain pages with display conditions, e.g. ["include/singular/front_page"] for the homepage only, ["include/general"] for the whole site, ["include/singular/page/12"] for one page. A snippet with no conditions prints on every page. New snippets are created as drafts unless status is "publish". To unpublish a snippet use set-post-status; to remove it use delete-post. Writing code requires "unfiltered_html".',
+				'description'         => 'Create an Elementor → Custom Code snippet, or change an existing one by post_id. Only the fields you pass change. Use it to replace a schema JSON-LD block, move a pixel to the body, or limit a snippet to certain pages with display conditions, e.g. ["include/singular/front_page"] for the homepage only, ["include/general"] for the whole site, ["include/singular/page/12"] for one page. A condition may also be a page URL or path ("https://example.com/room/deluxe/", "/room/deluxe/", or "exclude:/room/deluxe/"), which is resolved to that page\'s post id; a URL that matches no post is refused. A snippet with no conditions prints on every page. New snippets are created as drafts unless status is "publish". To unpublish a snippet use set-post-status; to remove it use delete-post. Writing code requires "unfiltered_html".',
 				'input_schema'        => array(
 					'type'       => 'object',
 					'properties' => array(
@@ -63,7 +63,7 @@ final class SetCustomCodeAbility {
 						'conditions'    => array(
 							'type'        => 'array',
 							'items'       => array( 'type' => 'string' ),
-							'description' => 'Display conditions, each "include/..." or "exclude/...". Replaces the existing ones. An empty array clears them, which makes the snippet print on every page.',
+							'description' => 'Display conditions, each "include/..." or "exclude/...", or a page URL/path (optionally prefixed "include:" or "exclude:") that is resolved to its post id. Replaces the existing ones. An empty array clears them, which makes the snippet print on every page.',
 						),
 						'status'        => array(
 							'type'        => 'string',
