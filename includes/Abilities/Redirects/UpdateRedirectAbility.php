@@ -1,6 +1,6 @@
 <?php
 /**
- * Ability for editing a Redirection rule.
+ * Ability for changing a redirect rule.
  *
  * @package McpAdapter
  */
@@ -11,14 +11,14 @@ namespace WP\MCP\Abilities\Redirects;
 
 use WP\MCP\Abilities\Support\AbilityRegistrar;
 use WP\MCP\Abilities\Support\ContentSupport;
-use WP\MCP\Abilities\Support\RedirectionSupport;
+use WP\MCP\Abilities\Support\RedirectsBackend;
 use WP_Error;
 
 // Exit if accessed directly.
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Update Redirect - Changes one Redirection rule, or switches it on or off.
+ * Update Redirect - Changes one redirect rule, or switches it on or off.
  */
 final class UpdateRedirectAbility {
 
@@ -30,23 +30,24 @@ final class UpdateRedirectAbility {
 	public static function register(): void {
 		$properties = array_merge(
 			array(
-				'id'      => array(
+				'id'       => array(
 					'type'        => 'integer',
 					'description' => 'The redirect rule to change, from redirects-list.',
 				),
-				'enabled' => array(
+				'enabled'  => array(
 					'type'        => 'boolean',
 					'description' => 'Enable or disable the rule.',
 				),
+				'provider' => RedirectsBackend::provider_schema(),
 			),
-			RedirectionSupport::rule_schema()
+			RedirectsBackend::rule_schema()
 		);
 
 		AbilityRegistrar::register(
 			'redirects-update',
 			array(
 				'label'               => 'Update Redirect',
-				'description'         => 'Change one Redirection rule: its source, target, status code, regex flag, matching options, title or group, or enable/disable it. Only the fields you pass change; the rest are kept. E.g. {"id":12,"target":"/rooms-suites/"} retargets a rule. Rules that match on something other than the URL (login state, referrer, cookie...) can only be enabled or disabled here.',
+				'description'         => 'Change one redirect rule in the Redirection plugin or Rank Math → Redirections: its source, target, status code, regex flag, matching options, or enable/disable it (title and group are Redirection only). Only the fields you pass change; the rest are kept. E.g. {"id":12,"target":"/rooms-suites/"} retargets a rule. Redirection rules that match on something other than the URL (login state, referrer, cookie...) can only be enabled or disabled here.',
 				'input_schema'        => array(
 					'type'       => 'object',
 					'properties' => $properties,
@@ -56,8 +57,10 @@ final class UpdateRedirectAbility {
 					'type'       => 'object',
 					'properties' => array(
 						'success'    => array( 'type' => 'boolean' ),
+						'provider'   => array( 'type' => 'string' ),
 						'redirect'   => array( 'type' => 'object' ),
 						'previous'   => array( 'type' => 'object' ),
+						'notes'      => array( 'type' => 'array' ),
 						'error'      => array( 'type' => 'string' ),
 						'error_code' => array( 'type' => 'string' ),
 					),
@@ -80,27 +83,27 @@ final class UpdateRedirectAbility {
 	 * @return array<string, mixed> The updated rule.
 	 */
 	public static function execute( $input = array() ): array {
-		$active = RedirectionSupport::require_active();
+		$input   = is_array( $input ) ? $input : array();
+		$backend = RedirectsBackend::resolve( $input );
 
-		if ( is_wp_error( $active ) ) {
-			return AbilityRegistrar::failure( $active );
+		if ( is_wp_error( $backend ) ) {
+			return AbilityRegistrar::failure( $backend );
 		}
 
-		$allowed = RedirectionSupport::require_cap( 'add' );
+		$allowed = $backend::require_cap( 'add' );
 
 		if ( is_wp_error( $allowed ) ) {
 			return AbilityRegistrar::failure( $allowed );
 		}
 
-		$item = RedirectionSupport::get( (int) ( $input['id'] ?? 0 ) );
+		$id       = (int) ( $input['id'] ?? 0 );
+		$previous = $backend::get_formatted( $id );
 
-		if ( is_wp_error( $item ) ) {
-			return AbilityRegistrar::failure( $item );
+		if ( is_wp_error( $previous ) ) {
+			return AbilityRegistrar::failure( $previous );
 		}
 
-		$current  = $item->to_json();
-		$previous = RedirectionSupport::format( $current );
-		$changes  = array_intersect_key( $input, RedirectionSupport::rule_schema() );
+		$changes = array_intersect_key( $input, RedirectsBackend::rule_schema() );
 
 		if ( empty( $changes ) && ! array_key_exists( 'enabled', $input ) ) {
 			return AbilityRegistrar::failure(
@@ -108,14 +111,17 @@ final class UpdateRedirectAbility {
 			);
 		}
 
-		if ( ! empty( $changes ) ) {
-			$details = RedirectionSupport::build_details( $changes, $current );
+		$notes = array();
 
-			if ( is_wp_error( $details ) ) {
-				return AbilityRegistrar::failure( $details );
+		if ( ! empty( $changes ) ) {
+			$prepared = $backend::prepare( $changes, $id );
+
+			if ( is_wp_error( $prepared ) ) {
+				return AbilityRegistrar::failure( $prepared );
 			}
 
-			$saved = $item->update( $details );
+			$notes = $prepared['notes'];
+			$saved = $backend::update( $id, $prepared );
 
 			if ( is_wp_error( $saved ) ) {
 				return AbilityRegistrar::failure( $saved );
@@ -123,15 +129,21 @@ final class UpdateRedirectAbility {
 		}
 
 		if ( array_key_exists( 'enabled', $input ) ) {
-			ContentSupport::to_bool( $input['enabled'], true ) ? $item->enable() : $item->disable();
+			$toggled = $backend::set_enabled( $id, ContentSupport::to_bool( $input['enabled'], true ) );
+
+			if ( is_wp_error( $toggled ) ) {
+				return AbilityRegistrar::failure( $toggled );
+			}
 		}
 
-		$fresh = RedirectionSupport::get( (int) $previous['id'] );
+		$fresh = $backend::get_formatted( $id );
 
 		return array(
 			'success'  => true,
-			'redirect' => RedirectionSupport::format( is_wp_error( $fresh ) ? $item : $fresh ),
+			'provider' => $backend::provider(),
+			'redirect' => is_wp_error( $fresh ) ? $previous : $fresh,
 			'previous' => $previous,
+			'notes'    => $notes,
 		);
 	}
 }

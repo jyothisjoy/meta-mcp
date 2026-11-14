@@ -112,6 +112,17 @@ final class AbilityRegistrar {
 
 		if ( isset( $args['output_schema'] ) ) {
 			$definition['output_schema'] = $args['output_schema'];
+
+			// PHP encodes an empty array as a JSON list, so a field the schema calls an object ("applied",
+			// "translations", "errors"...) came out as [] whenever it was empty, and MCP clients that check results
+			// against the output schema (the Python SDK does) rejected the whole response: create-post and
+			// update-post failed that way with nothing to apply. Shape every result to its schema on the way out.
+			$schema   = $args['output_schema'];
+			$callback = $args['execute_callback'];
+
+			$definition['execute_callback'] = static function ( ...$call_args ) use ( $callback, $schema ) {
+				return self::conform_output( call_user_func_array( $callback, $call_args ), $schema );
+			};
 		}
 
 		wp_register_ability( $name, $definition );
@@ -182,6 +193,55 @@ final class AbilityRegistrar {
 	 *
 	 * @return array{success: false, error: string, error_code: string} The failure envelope.
 	 */
+	/**
+	 * Shapes a value to its JSON schema where PHP and JSON disagree: an empty array where the schema says
+	 * "object" becomes an empty object ({} rather than []). Walks object properties and array items; everything
+	 * else is returned as it is.
+	 *
+	 * @param mixed                $value  The value.
+	 * @param array<string, mixed> $schema Its JSON schema.
+	 *
+	 * @return mixed The value, shaped.
+	 */
+	public static function conform_output( $value, array $schema ) {
+		$types = isset( $schema['type'] ) ? (array) $schema['type'] : array();
+
+		if ( array() === $value && in_array( 'object', $types, true ) && ! in_array( 'array', $types, true ) ) {
+			return new \stdClass();
+		}
+
+		if ( ! is_array( $value ) ) {
+			return $value;
+		}
+
+		if ( isset( $schema['properties'] ) && is_array( $schema['properties'] ) && ! self::is_list( $value ) ) {
+			foreach ( $schema['properties'] as $key => $sub ) {
+				if ( array_key_exists( $key, $value ) && is_array( $sub ) ) {
+					$value[ $key ] = self::conform_output( $value[ $key ], $sub );
+				}
+			}
+		}
+
+		if ( isset( $schema['items'] ) && is_array( $schema['items'] ) && self::is_list( $value ) ) {
+			foreach ( $value as $i => $item ) {
+				$value[ $i ] = self::conform_output( $item, $schema['items'] );
+			}
+		}
+
+		return $value;
+	}
+
+	/**
+	 * Whether an array is a list (keys 0..n-1): array_is_list() needs PHP 8.1, the plugin runs on 7.4.
+	 *
+	 * @param array<mixed> $value The array.
+	 *
+	 * @return bool True for a list.
+	 */
+	private static function is_list( array $value ): bool {
+		return array() === $value || array_keys( $value ) === range( 0, count( $value ) - 1 );
+	}
+
 	public static function failure( WP_Error $error ): array {
 		return array(
 			'success'    => false,

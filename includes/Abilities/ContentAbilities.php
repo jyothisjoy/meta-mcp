@@ -34,6 +34,7 @@ use WP\MCP\Abilities\Elementor\ListElementorTemplatesAbility;
 use WP\MCP\Abilities\Elementor\SetCustomCodeAbility;
 use WP\MCP\Abilities\Elementor\SetElementorConditionsAbility;
 use WP\MCP\Abilities\Elementor\SetElementorDataAbility;
+use WP\MCP\Abilities\Elementor\InsertElementorElementAbility;
 use WP\MCP\Abilities\Elementor\UpdateElementorElementAbility;
 use WP\MCP\Abilities\Menus\AddMenuItemAbility;
 use WP\MCP\Abilities\Menus\CreateMenuAbility;
@@ -69,7 +70,7 @@ use WP\MCP\Abilities\Support\AbilityRegistrar;
 use WP\MCP\Abilities\Support\ElementorSupport;
 use WP\MCP\Abilities\Support\PolylangSupport;
 use WP\MCP\Abilities\Support\RankMathSupport;
-use WP\MCP\Abilities\Support\RedirectionSupport;
+use WP\MCP\Abilities\Support\RedirectsBackend;
 use WP\MCP\Abilities\Support\Settings;
 use WP\MCP\Abilities\Users\CreateUserAbility;
 use WP\MCP\Abilities\Users\DeleteUserAbility;
@@ -142,6 +143,7 @@ final class ContentAbilities {
 			GetElementorDataAbility::class,
 			SetElementorDataAbility::class,
 			UpdateElementorElementAbility::class,
+			InsertElementorElementAbility::class,
 			ListElementorTemplatesAbility::class,
 			GetElementorConditionsAbility::class,
 			SetElementorConditionsAbility::class,
@@ -374,7 +376,7 @@ final class ContentAbilities {
 				$groups[] = 'seo';
 			}
 
-			if ( $register_inactive || RedirectionSupport::is_active() ) {
+			if ( $register_inactive || RedirectsBackend::any_active() ) {
 				$groups[] = 'redirects';
 			}
 

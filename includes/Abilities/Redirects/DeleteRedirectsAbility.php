@@ -11,7 +11,7 @@ namespace WP\MCP\Abilities\Redirects;
 
 use WP\MCP\Abilities\Support\AbilityRegistrar;
 use WP\MCP\Abilities\Support\ContentSupport;
-use WP\MCP\Abilities\Support\RedirectionSupport;
+use WP\MCP\Abilities\Support\RedirectsBackend;
 use WP_Error;
 
 // Exit if accessed directly.
@@ -32,7 +32,7 @@ final class DeleteRedirectsAbility {
 			'redirects-delete',
 			array(
 				'label'               => 'Delete Redirects',
-				'description'         => 'Permanently delete Redirection rules by id. There is no trash, so confirm must be true. To stop a rule without losing it, use redirects-update with enabled false instead. Returns the deleted rules so they can be recreated if needed.',
+				'description'         => 'Permanently delete redirect rules by id, in the Redirection plugin or Rank Math → Redirections (provider picks one when both are active). There is no trash, so confirm must be true. To stop a rule without losing it, use redirects-update with enabled false instead. Returns the deleted rules so they can be recreated if needed.',
 				'input_schema'        => array(
 					'type'       => 'object',
 					'properties' => array(
@@ -41,10 +41,11 @@ final class DeleteRedirectsAbility {
 							'items'       => array( 'type' => 'integer' ),
 							'description' => 'The redirect rule ids to delete.',
 						),
-						'confirm' => array(
+						'confirm'  => array(
 							'type'        => 'boolean',
 							'description' => 'Must be true. Deletion cannot be undone.',
 						),
+						'provider' => RedirectsBackend::provider_schema(),
 					),
 					'required'   => array( 'ids', 'confirm' ),
 				),
@@ -52,6 +53,7 @@ final class DeleteRedirectsAbility {
 					'type'       => 'object',
 					'properties' => array(
 						'success'    => array( 'type' => 'boolean' ),
+						'provider'   => array( 'type' => 'string' ),
 						'deleted'    => array( 'type' => 'array' ),
 						'error'      => array( 'type' => 'string' ),
 						'error_code' => array( 'type' => 'string' ),
@@ -75,13 +77,14 @@ final class DeleteRedirectsAbility {
 	 * @return array<string, mixed> The deleted rules.
 	 */
 	public static function execute( $input = array() ): array {
-		$active = RedirectionSupport::require_active();
+		$input   = is_array( $input ) ? $input : array();
+		$backend = RedirectsBackend::resolve( $input );
 
-		if ( is_wp_error( $active ) ) {
-			return AbilityRegistrar::failure( $active );
+		if ( is_wp_error( $backend ) ) {
+			return AbilityRegistrar::failure( $backend );
 		}
 
-		$allowed = RedirectionSupport::require_cap( 'delete' );
+		$allowed = $backend::require_cap( 'delete' );
 
 		if ( is_wp_error( $allowed ) ) {
 			return AbilityRegistrar::failure( $allowed );
@@ -105,7 +108,7 @@ final class DeleteRedirectsAbility {
 		$items = array();
 
 		foreach ( $ids as $id ) {
-			$item = RedirectionSupport::get( $id );
+			$item = $backend::get_formatted( $id );
 
 			if ( is_wp_error( $item ) ) {
 				return AbilityRegistrar::failure( $item );
@@ -117,13 +120,26 @@ final class DeleteRedirectsAbility {
 		$deleted = array();
 
 		foreach ( $items as $item ) {
-			$deleted[] = RedirectionSupport::format( $item );
-			$item->delete();
+			$gone = $backend::delete( (int) $item['id'] );
+
+			if ( is_wp_error( $gone ) ) {
+				return AbilityRegistrar::failure_with_details(
+					$gone->get_error_message(),
+					'redirect_not_deleted',
+					array(
+						'deleted'  => $deleted,
+						'provider' => $backend::provider(),
+					)
+				);
+			}
+
+			$deleted[] = $item;
 		}
 
 		return array(
-			'success' => true,
-			'deleted' => $deleted,
+			'success'  => true,
+			'provider' => $backend::provider(),
+			'deleted'  => $deleted,
 		);
 	}
 }

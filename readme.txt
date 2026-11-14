@@ -4,7 +4,7 @@ Tags:              mcp, ai, abilities-api, model-context-protocol, menus, elemen
 Requires at least: 6.9
 Tested up to:      7.0
 Requires PHP:      7.4
-Stable tag:        1.6.0
+Stable tag:        1.7.0
 License:           GPL-2.0-or-later
 License URI:       https://spdx.org/licenses/GPL-2.0-or-later.html
 
@@ -36,11 +36,11 @@ A second MCP server at `/wp-json/mcp/wp-content` exposes 61 first-class tools:
 * **Elementor** – Read a layout as a flat, id-addressable list; patch individual widgets by element id; or read and replace the whole element tree. Writes route through Elementor's document API so the generated CSS and companion metas stay consistent.
 * **Polylang and Polylang Pro** – Languages, per-post language assignment, linking translations, creating a translation that carries over terms, meta and the Elementor layout, term translations, and on-demand structure sync.
 * **Rank Math SEO** – Read and write per-page SEO titles, descriptions, canonicals and robots on up to 100 posts in one call, find pages whose own robots or canonical override the site defaults, and change the Titles & Meta, Sitemap and General settings, and regenerate the XML sitemaps.
-* **Redirection** – List, create (singly or in bulk, exact or regex, 301/302/307/308 or 410), edit, enable, disable and delete redirect rules.
+* **Redirects** – List, create (singly or in bulk, exact or regex, 301/302/307/308 or 410), edit, enable, disable and delete redirect rules, in the Redirection plugin or Rank Math's Redirections module, whichever the site uses.
 * **Elementor Custom Code** – List, read, create and edit Elementor Pro Custom Code snippets, including their code, location, priority and display conditions.
 * **Site** – Read and change the Site Title, Tagline, homepage and other General/Reading settings from a fixed allowlist, and purge the page cache (LiteSpeed, WP Rocket, W3 Total Cache, WP Super Cache, SiteGround) and Elementor's CSS.
 
-Elementor, Polylang, Rank Math and Redirection are optional. When they are inactive, the relevant tools report that plainly instead of failing. The Rank Math, Redirection, Custom Code and site tools share a "Site-wide tools" switch on the settings screen.
+Elementor, Polylang, Rank Math and Redirection are optional (the redirect tools work with either Redirection or Rank Math → Redirections). When they are inactive, the relevant tools report that plainly instead of failing. The Rank Math, Redirection, Custom Code and site tools share a "Site-wide tools" switch on the settings screen.
 
 Menu editing is gated on the same `edit_theme_options` capability WordPress uses for Appearance → Menus, and can be switched off entirely on the settings screen. On a block theme, the menu tools also report the Navigation blocks the theme uses, which are ordinary `wp_navigation` posts the content tools can already read and write.
 
@@ -71,6 +71,14 @@ Yes. Those classic menus have their own set of tools, because a menu item stores
 No. The content tools work on any WordPress site. The Elementor and Polylang tools activate only when those plugins are present; call the `content-integrations-status` tool to see what a given site supports.
 
 == Changelog ==
+
+= 1.7.0 =
+* The redirect abilities (`redirects-list`, `redirects-create`, `redirects-update`, `redirects-delete`) now also work with Rank Math's Redirections module, not only the Redirection plugin. Without a `provider` input they use whichever is active (Redirection when both are); `provider: "rank_math"` or `"redirection"` picks one. Inputs and outputs are the same for both; every rule now says which `provider` it lives in.
+* Rank Math rules are written through Rank Math's own `Redirection` model and `DB` class, so its source sanitiser and redirection cache run as they do in its admin screen. Exact sources are taken as paths or full URLs on the site; a regex starting `^/` is adjusted to `^` because Rank Math matches the path without its leading slash. Rank Math's extra comparisons are available as `match`: `contains`, `start` or `end`. Codes 301, 302, 307, 410 and 451 (a 303, 308 or 404 is refused with the code to use instead); Redirection-only options (group, position, query handling, trailing slash, title) are ignored there with a note. A rule whose target is its own source is refused as a loop.
+* `redirects-create` now also returns `ids`, the ids of the rules it created.
+* Added `elementor-insert-element`: adds a widget (or a container with widgets) before or after an existing element, as the first or last child of a container, or at the start or end of the page, without rewriting the rest of the layout. A widget at the top level is wrapped in a container or a section and column, the way the page is built. Returns the new element id; undo with `elementor-update-element`, operation `delete`. Text a page doesn't have yet (an intro under the H1, a lead paragraph) could not be added before: find / replace needs something to find.
+* Fixed: a result field the output schema calls an object (`applied`, `translations`, `errors`, `changed`...) was sent as an empty JSON list `[]` whenever it was empty, and MCP clients that check results against the schema (the Python SDK does) rejected the whole response. `create-post` and `update-post` failed this way whenever nothing extra was applied, even though the post was saved. Every ability's result is now shaped to its output schema on the way out.
+* `content-integrations-status` reports whether Rank Math's Redirections module is on, and which provider the redirect abilities use (`redirects_provider`). The redirect abilities are registered when either redirect manager is active.
 
 = 1.6.0 =
 * Added `find-text` and `replace-text`, which find and replace text wherever it is stored: post titles, excerpts and content; every text, link and repeater setting of every Elementor widget, on pages and in Elementor templates (headers, footers, global widgets, popups); Elementor Custom Code snippets; and menu item labels and custom link URLs. Each match reports the post, field, Elementor element id, widget type and setting path (e.g. `icon_list.2.text`), with context, and flags matches in templates, snippets and menus as shared by many pages. `update-post` could not do this, because on an Elementor page the visible text is not in `post_content`, and `elementor-update-element` needed the element id first.

@@ -10,7 +10,7 @@ declare( strict_types=1 );
 namespace WP\MCP\Abilities\Redirects;
 
 use WP\MCP\Abilities\Support\AbilityRegistrar;
-use WP\MCP\Abilities\Support\RedirectionSupport;
+use WP\MCP\Abilities\Support\RedirectsBackend;
 
 // Exit if accessed directly.
 defined( 'ABSPATH' ) || exit;
@@ -30,7 +30,7 @@ final class ListRedirectsAbility {
 			'redirects-list',
 			array(
 				'label'               => 'List Redirects',
-				'description'         => 'List the Redirection plugin\'s redirect rules, with their source, target, status code, regex flag, hit count and whether they are enabled, plus the redirect groups. Filter by source or target text (partial match), title, group, enabled/disabled, regex or status code. Use it to find a rule\'s id before redirects-update or redirects-delete, or to check a source is not already redirected.',
+				'description'         => 'List the site\'s redirect rules, from the Redirection plugin or Rank Math → Redirections (provider picks one when both are active), with their source, target, status code, regex flag, hit count and whether they are enabled, plus the redirect groups (Redirection only). Filter by source or target text (partial match), title, group, enabled/disabled, regex or status code. Use it to find a rule\'s id before redirects-update or redirects-delete, or to check a source is not already redirected.',
 				'input_schema'        => array(
 					'type'       => 'object',
 					'properties' => array(
@@ -71,12 +71,15 @@ final class ListRedirectsAbility {
 							'type'        => 'integer',
 							'description' => 'Page number. Default 1.',
 						),
+						'provider' => RedirectsBackend::provider_schema(),
 					),
 				),
 				'output_schema'       => array(
 					'type'       => 'object',
 					'properties' => array(
 						'success'    => array( 'type' => 'boolean' ),
+						'provider'   => array( 'type' => 'string' ),
+						'providers'  => array( 'type' => 'array' ),
 						'redirects'  => array( 'type' => 'array' ),
 						'total'      => array( 'type' => 'integer' ),
 						'groups'     => array( 'type' => 'array' ),
@@ -101,25 +104,29 @@ final class ListRedirectsAbility {
 	 * @return array<string, mixed> The redirects.
 	 */
 	public static function execute( $input = array() ): array {
-		$active = RedirectionSupport::require_active();
+		$input   = is_array( $input ) ? $input : array();
+		$backend = RedirectsBackend::resolve( $input );
 
-		if ( is_wp_error( $active ) ) {
-			return AbilityRegistrar::failure( $active );
+		if ( is_wp_error( $backend ) ) {
+			return AbilityRegistrar::failure( $backend );
 		}
 
-		$allowed = RedirectionSupport::require_cap( 'manage' );
+		$allowed = $backend::require_cap( 'manage' );
 
 		if ( is_wp_error( $allowed ) ) {
 			return AbilityRegistrar::failure( $allowed );
 		}
 
-		$result = RedirectionSupport::list( is_array( $input ) ? $input : array() );
+		$result = $backend::list( $input );
 
 		return array(
 			'success'   => true,
+			'provider'  => $backend::provider(),
+			// Both active: pass provider to list the other one's rules.
+			'providers' => RedirectsBackend::active(),
 			'redirects' => $result['items'],
 			'total'     => $result['total'],
-			'groups'    => RedirectionSupport::groups(),
+			'groups'    => $backend::groups(),
 		);
 	}
 }

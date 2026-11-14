@@ -16,7 +16,9 @@ use WP\MCP\Abilities\Support\MenuSupport;
 use WP\MCP\Abilities\Support\CustomCodeSupport;
 use WP\MCP\Abilities\Support\PolylangSupport;
 use WP\MCP\Abilities\Support\RankMathSupport;
+use WP\MCP\Abilities\Support\RankMathRedirectsSupport;
 use WP\MCP\Abilities\Support\RedirectionSupport;
+use WP\MCP\Abilities\Support\RedirectsBackend;
 use WP\MCP\Abilities\Support\Settings;
 use WP\MCP\Abilities\Support\UserSupport;
 
@@ -42,7 +44,7 @@ final class IntegrationsStatusAbility {
 			'content-integrations-status',
 			array(
 				'label'               => 'Content Integrations Status',
-				'description'         => 'Report what this WordPress site supports: whether Elementor, Elementor Pro, Polylang and Polylang Pro are active and at which versions, whether MCP content writing is enabled, whether the user abilities are switched on and which roles exist, what navigation menus and theme menu locations exist, whether the site-wide tools are on and which of Rank Math SEO, the Redirection plugin, Elementor Custom Code and a page cache plugin are present, and what the current user is allowed to do. Call this first to find out which content abilities will work here.',
+				'description'         => 'Report what this WordPress site supports: whether Elementor, Elementor Pro, Polylang and Polylang Pro are active and at which versions, whether MCP content writing is enabled, whether the user abilities are switched on and which roles exist, what navigation menus and theme menu locations exist, whether the site-wide tools are on and which of Rank Math SEO, the Redirection plugin, the Rank Math Redirections module (and which one the redirect abilities use), Elementor Custom Code and a page cache plugin are present, and what the current user is allowed to do. Call this first to find out which content abilities will work here.',
 				'input_schema'        => array(
 					'type'       => 'object',
 					'properties' => array(),
@@ -136,6 +138,11 @@ final class IntegrationsStatusAbility {
 					'active'  => RedirectionSupport::is_active(),
 					'version' => RedirectionSupport::version(),
 				),
+				'rank_math_redirections' => array(
+					'active' => RankMathRedirectsSupport::is_active(),
+				),
+				// What the redirects-* abilities use without a "provider" input (null: neither is active).
+				'redirects_provider'  => RedirectsBackend::active()[0] ?? null,
 				'custom_code'         => CustomCodeSupport::is_available(),
 				'page_cache'          => self::page_caches(),
 				'can_manage_options'  => current_user_can( 'manage_options' ),

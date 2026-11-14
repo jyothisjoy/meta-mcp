@@ -395,6 +395,7 @@ final class RedirectionSupport {
 
 		return array(
 			'id'          => (int) ( $item['id'] ?? 0 ),
+			'provider'    => 'redirection',
 			'source'      => (string) ( $item['url'] ?? '' ),
 			'target'      => isset( $item['action_data']['url'] ) ? (string) $item['action_data']['url'] : '',
 			'code'        => (int) ( $item['action_code'] ?? 0 ),
@@ -409,6 +410,147 @@ final class RedirectionSupport {
 			'hits'        => (int) ( $item['hits'] ?? 0 ),
 			'last_access' => (string) ( $item['last_access'] ?? '' ),
 		);
+	}
+
+	// ------------------------------------------------------------ backend contract (RedirectsBackend)
+
+	/**
+	 * Provider name.
+	 *
+	 * @return string The name.
+	 */
+	public static function provider(): string {
+		return 'redirection';
+	}
+
+	/**
+	 * Loads one rule as the abilities show it.
+	 *
+	 * @param int $id Redirect ID.
+	 *
+	 * @return array<string, mixed>|\WP_Error The redirect.
+	 */
+	public static function get_formatted( int $id ) {
+		$item = self::get( $id );
+
+		return is_wp_error( $item ) ? $item : self::format( $item );
+	}
+
+	/**
+	 * Validates a rule and builds Redirection's details.
+	 *
+	 * @param array<string, mixed> $rule        Rule fields.
+	 * @param int                  $existing_id The rule being changed, or 0 for a new one.
+	 *
+	 * @return array{data: array<string, mixed>, notes: string[]}|\WP_Error The prepared rule.
+	 */
+	public static function prepare( array $rule, int $existing_id = 0 ) {
+		if ( isset( $rule['match'] ) && 'exact' !== strtolower( (string) $rule['match'] ) ) {
+			return new WP_Error( 'invalid_match', 'Redirection matches a plain source exactly: for "contains", "start" or "end" use a regex (regex true), e.g. "^/old-section/.*".' );
+		}
+
+		if ( isset( $rule['code'] ) && 451 === (int) $rule['code'] ) {
+			return new WP_Error( 'invalid_code', 'Redirection has no 451: use 410 for a page that is gone.' );
+		}
+
+		$existing = null;
+
+		if ( $existing_id > 0 ) {
+			$item = self::get( $existing_id );
+
+			if ( is_wp_error( $item ) ) {
+				return $item;
+			}
+
+			$existing = $item->to_json();
+		}
+
+		unset( $rule['match'] );
+		$details = self::build_details( $rule, $existing );
+
+		return is_wp_error( $details ) ? $details : array(
+			'data'  => $details,
+			'notes' => array(),
+		);
+	}
+
+	/**
+	 * Creates a rule.
+	 *
+	 * @param array{data: array<string, mixed>, notes: string[]} $prepared From prepare().
+	 * @param bool                                               $enabled  Enabled or disabled.
+	 *
+	 * @return array<string, mixed>|\WP_Error The new rule.
+	 */
+	public static function create( array $prepared, bool $enabled ) {
+		$details           = $prepared['data'];
+		$details['status'] = $enabled ? 'enabled' : 'disabled';
+		$item              = \Red_Item::create( $details );
+
+		return is_wp_error( $item ) ? $item : self::format( $item );
+	}
+
+	/**
+	 * Changes a rule.
+	 *
+	 * @param int                                                $id       Rule ID.
+	 * @param array{data: array<string, mixed>, notes: string[]} $prepared From prepare( $rule, $id ).
+	 *
+	 * @return array<string, mixed>|\WP_Error The rule after the change.
+	 */
+	public static function update( int $id, array $prepared ) {
+		$item = self::get( $id );
+
+		if ( is_wp_error( $item ) ) {
+			return $item;
+		}
+
+		$saved = $item->update( $prepared['data'] );
+
+		if ( is_wp_error( $saved ) ) {
+			return $saved;
+		}
+
+		return self::get_formatted( $id );
+	}
+
+	/**
+	 * Enables or disables a rule.
+	 *
+	 * @param int  $id      Rule ID.
+	 * @param bool $enabled Enabled or disabled.
+	 *
+	 * @return true|\WP_Error True on success.
+	 */
+	public static function set_enabled( int $id, bool $enabled ) {
+		$item = self::get( $id );
+
+		if ( is_wp_error( $item ) ) {
+			return $item;
+		}
+
+		$enabled ? $item->enable() : $item->disable();
+
+		return true;
+	}
+
+	/**
+	 * Deletes a rule for good.
+	 *
+	 * @param int $id Rule ID.
+	 *
+	 * @return true|\WP_Error True on success.
+	 */
+	public static function delete( int $id ) {
+		$item = self::get( $id );
+
+		if ( is_wp_error( $item ) ) {
+			return $item;
+		}
+
+		$item->delete();
+
+		return true;
 	}
 
 	/**
