@@ -107,6 +107,10 @@ final class GetElementorStructureAbility {
 			return AbilityRegistrar::failure( $post );
 		}
 
+		if ( ! ContentSupport::can_see_protected_content( $post ) ) {
+			return AbilityRegistrar::failure( new \WP_Error( 'content_protected', sprintf( 'Post %d is password protected; its layout is only shown to users who can edit it.', $post->ID ) ) );
+		}
+
 		$elements = ElementorSupport::get_elements( $post->ID );
 
 		if ( is_wp_error( $elements ) ) {
@@ -128,12 +132,23 @@ final class GetElementorStructureAbility {
 			);
 		}
 
-		return array(
+		$result = array(
 			'success'              => true,
 			'post_id'              => $post->ID,
 			'built_with_elementor' => ElementorSupport::is_built_with_elementor( $post->ID ),
 			'element_count'        => count( $flat ),
 			'elements'             => $flat,
 		);
+
+		// A layout with inline SVGs or long HTML can run to megabytes with settings.
+		if ( ContentSupport::to_bool( $input['include_settings'] ?? null, false ) && strlen( (string) wp_json_encode( $flat ) ) > 300000 ) {
+			foreach ( $result['elements'] as $i => $node ) {
+				$result['elements'][ $i ]['settings'] = null;
+			}
+
+			$result['note'] = 'Settings were left out: with them the response would exceed 300 KB. Narrow it with search or widgets_only, or read one element with elementor-get-data.';
+		}
+
+		return $result;
 	}
 }

@@ -38,7 +38,7 @@ final class ListPostsAbility {
 			'list-posts',
 			array(
 				'label'               => 'List Posts',
-				'description'         => 'Query posts of any post type with filters for status, search term, author, taxonomy terms, parent, and language. Returns a paginated summary list; use get-post to read a single item in full. Non-public statuses require edit permission on the post type.',
+				'description'         => 'Query posts of any post type with filters for status, search term, author, taxonomy terms, parent, and language. Returns a paginated summary list (language as a slug, translations as {lang: post id}); use get-post to read a single item in full. Non-public statuses require edit permission on the post type.',
 				'input_schema'        => array(
 					'type'       => 'object',
 					'properties' => array(
@@ -113,6 +113,7 @@ final class ListPostsAbility {
 						),
 						'total'       => array( 'type' => 'integer' ),
 						'total_pages' => array( 'type' => 'integer' ),
+						'withheld'    => array( 'type' => 'integer' ),
 						'page'        => array( 'type' => 'integer' ),
 						'error'       => array( 'type' => 'string' ),
 						'error_code'  => array( 'type' => 'string' ),
@@ -145,6 +146,13 @@ final class ListPostsAbility {
 		$can_edit_type = ContentSupport::require_post_type_cap( $post_type, 'edit_posts' );
 		$can_edit      = ! is_wp_error( $can_edit_type );
 
+		// A post type visitors cannot see (form entries, bookings...) is only listed to its editors.
+		if ( ! $can_edit && ! ContentSupport::is_public_type( $post_type ) ) {
+			return AbilityRegistrar::failure( $can_edit_type );
+		}
+
+		$can_edit_others = ! is_wp_error( ContentSupport::require_post_type_cap( $post_type, 'edit_others_posts' ) );
+
 		$status = self::resolve_status( $input['status'] ?? null, $can_edit );
 
 		if ( is_wp_error( $status ) ) {
@@ -164,6 +172,8 @@ final class ListPostsAbility {
 			'order'          => isset( $input['order'] ) && 'ASC' === strtoupper( (string) $input['order'] ) ? 'ASC' : 'DESC',
 			// The abilities are called interactively; a stale count is worse than the query cost.
 			'no_found_rows'  => false,
+			// Private posts only for their author or users with read_private_posts.
+			'perm'           => 'readable',
 		);
 
 		if ( ! empty( $input['search'] ) ) {
@@ -172,6 +182,14 @@ final class ListPostsAbility {
 
 		if ( ! empty( $input['author'] ) ) {
 			$args['author'] = (int) $input['author'];
+		}
+
+		// Drafts, pending and scheduled posts of other authors need edit_others_posts:
+		// a status filter without "publish" can be narrowed in the query itself.
+		$statuses = (array) $status;
+
+		if ( ! $can_edit_others && ! in_array( 'publish', $statuses, true ) && ! in_array( 'any', $statuses, true ) ) {
+			$args['author'] = get_current_user_id();
 		}
 
 		if ( isset( $input['parent'] ) && '' !== $input['parent'] ) {
@@ -208,15 +226,37 @@ final class ListPostsAbility {
 			}
 
 			$args['lang'] = $language;
+		} else {
+			// Polylang otherwise narrows the query to one language.
+			$args['lang'] = '';
 		}
 
-		$query           = new WP_Query( $args );
+		$query = new WP_Query( $args );
+
+		// Mixed queries ("any") can still return other authors' unpublished posts; drop
+		// whatever this user may not read. The totals then count from the query, so say so.
+		$withheld = 0;
+
+		if ( ! $can_edit_others ) {
+			$readable = array_values(
+				array_filter(
+					$query->posts,
+					static fn( $post ): bool => 'publish' === $post->post_status || current_user_can( 'read_post', $post->ID )
+				)
+			);
+			$withheld     = count( $query->posts ) - count( $readable );
+			$query->posts = $readable;
+		}
+
 		$include_content = ContentSupport::to_bool( $input['include_content'] ?? null, false );
 
 		$posts = array_map(
 			static fn( $post ): array => ContentSupport::format_post(
 				$post,
-				array( 'include_content' => $include_content )
+				array(
+					'include_content' => $include_content,
+					'compact'         => true,
+				)
 			),
 			$query->posts
 		);
@@ -227,6 +267,7 @@ final class ListPostsAbility {
 			'total'       => (int) $query->found_posts,
 			'total_pages' => (int) $query->max_num_pages,
 			'page'        => $page,
+			'withheld'    => $withheld,
 		);
 	}
 

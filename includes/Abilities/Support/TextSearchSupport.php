@@ -97,7 +97,7 @@ final class TextSearchSupport {
 			'match_mode'     => array(
 				'type'        => 'string',
 				'enum'        => self::MODES,
-				'description' => '"exact" (default) or "phone". Use "phone" for phone numbers: it matches the same digits however they are written ("+971 2 304 4555", "+971-2-3044555", "+971 (0)2 304 4555", "tel:+97123044555", "0097123044555"), including inside tel: and WhatsApp links.',
+				'description' => '"exact" (default) or "phone": matches the same digits however written ("+971 2 304 4555", "+971-2-3044555", "+971 (0)2...", "tel:+97123044555", "00971..."), including tel: and WhatsApp links.',
 			),
 			'case_sensitive' => array(
 				'type'        => 'boolean',
@@ -109,7 +109,7 @@ final class TextSearchSupport {
 					'type' => 'string',
 					'enum' => self::FIELDS,
 				),
-				'description' => 'Where to look. Default all: "title", "excerpt", "content" (post_content), "elementor" (every text, link and repeater setting of every Elementor widget, in pages and in templates such as headers, footers and global widgets), "custom_code" (Elementor Pro Custom Code snippets, e.g. JSON-LD schema), "menus" (menu item labels and custom link URLs).',
+				'description' => 'Where to look. Default all: "title", "excerpt", "content", "elementor" (widget settings on pages and templates), "custom_code" (Elementor Pro snippets), "menus" (item labels and custom URLs).',
 			),
 			'post_types'     => array(
 				'type'        => 'array',
@@ -307,7 +307,8 @@ final class TextSearchSupport {
 	 * @return string Digits only.
 	 */
 	private static function canonical_digits( string $phone ): string {
-		$digits = (string) preg_replace( '/\D/', '', $phone );
+		// "+971 (0)2 ..." is +971 2 ...: the bracketed trunk 0 is dropped when dialling internationally.
+		$digits = (string) preg_replace( '/\D/', '', (string) preg_replace( '/\(\s*0\s*\)/', '', $phone ) );
 
 		return 0 === strpos( $digits, '00' ) ? substr( $digits, 2 ) : $digits;
 	}

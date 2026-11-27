@@ -61,6 +61,8 @@ final class RankMathSupport {
 		'twitter_title'        => array( 'rank_math_twitter_title', 'text' ),
 		'twitter_description'  => array( 'rank_math_twitter_description', 'text' ),
 		'pillar_content'       => array( 'rank_math_pillar_content', 'toggle' ),
+		// Rank Math ignores twitter_title/description while this is on, and it is on unless the post stores "off".
+		'twitter_use_facebook' => array( 'rank_math_twitter_use_facebook', 'default_on' ),
 	);
 
 	/**
@@ -335,6 +337,11 @@ final class RankMathSupport {
 				continue;
 			}
 
+			if ( 'default_on' === $field[1] ) {
+				$fields[ $name ] = 'off' !== $raw;
+				continue;
+			}
+
 			if ( 'toggle' === $field[1] ) {
 				$fields[ $name ] = self::is_on( $raw );
 				continue;
@@ -432,6 +439,24 @@ final class RankMathSupport {
 	 * @return array{updated: string[], deleted: string[], errors: array<string, string>} Result summary.
 	 */
 	public static function write_post( WP_Post $post, array $changes, bool $dry_run = false ): array {
+		// The X (Twitter) title and description only print when the post opts out of
+		// "use data from the Facebook tab". Writing one opts out; clearing both opts back in.
+		if ( ! array_key_exists( 'twitter_use_facebook', $changes ) ) {
+			$twitter = array_intersect_key( $changes, array_flip( array( 'twitter_title', 'twitter_description' ) ) );
+			$given   = array_filter( $twitter, static fn( $v ): bool => null !== $v && '' !== trim( (string) $v ) );
+
+			if ( ! empty( $given ) ) {
+				$changes['twitter_use_facebook'] = false;
+			} elseif ( ! empty( $twitter ) ) {
+				$other = 'twitter_title' === array_key_first( $twitter ) && 1 === count( $twitter ) ? 'twitter_description' : 'twitter_title';
+				$kept  = 2 === count( $twitter ) ? '' : (string) get_post_meta( $post->ID, 'rank_math_' . $other, true );
+
+				if ( '' === trim( $kept ) ) {
+					$changes['twitter_use_facebook'] = true;
+				}
+			}
+		}
+
 		$result = array(
 			'updated' => array(),
 			'deleted' => array(),
@@ -519,13 +544,7 @@ final class RankMathSupport {
 					return new WP_Error( 'invalid_value', 'Expected a URL string.' );
 				}
 
-				$clean = esc_url_raw( trim( $value ) );
-
-				if ( '' === $clean ) {
-					return new WP_Error( 'invalid_url', sprintf( '"%s" is not a valid URL.', $value ) );
-				}
-
-				return $clean;
+				return ContentSupport::clean_absolute_url( $value );
 
 			case 'robots':
 				$list = is_array( $value ) ? $value : explode( ',', (string) $value );
@@ -564,6 +583,10 @@ final class RankMathSupport {
 				}
 
 				return empty( $clean ) ? null : $clean;
+
+			case 'default_on':
+				// On is the default, so it is stored by deleting the key.
+				return ContentSupport::to_bool( $value, true ) ? null : 'off';
 
 			case 'toggle':
 				return ContentSupport::to_bool( $value, false ) ? 'on' : null;
@@ -621,11 +644,79 @@ final class RankMathSupport {
 			),
 			'twitter_title'        => array( 'type' => $nullable_string ),
 			'twitter_description'  => array( 'type' => $nullable_string ),
+			'twitter_use_facebook' => array(
+				'type'        => array( 'boolean', 'null' ),
+				'description' => 'X card reuses the Facebook title/description/image (default on; twitter_title/description are not printed while on). Setting either turns it off; clearing both turns it on.',
+			),
 			'pillar_content'       => array(
 				'type'        => array( 'boolean', 'null' ),
 				'description' => 'Mark as pillar content.',
 			),
 		);
+	}
+
+	/**
+	 * Builds the meta query for a seo-get-posts filter.
+	 *
+	 * @param string $filter Filter name.
+	 *
+	 * @return array<mixed> The meta query, or an empty array.
+	 */
+	public static function filter_meta_query( string $filter ): array {
+		switch ( $filter ) {
+			case 'robots_override':
+				return array(
+					array(
+						'key'     => 'rank_math_robots',
+						'compare' => 'EXISTS',
+					),
+				);
+
+			case 'noindex':
+				return array(
+					array(
+						'key'     => 'rank_math_robots',
+						'value'   => '"noindex"',
+						'compare' => 'LIKE',
+					),
+				);
+
+			case 'canonical_override':
+				return array(
+					array(
+						'key'     => 'rank_math_canonical_url',
+						'value'   => '',
+						'compare' => '!=',
+					),
+				);
+
+			case 'missing_title':
+			case 'missing_description':
+				$key = 'missing_title' === $filter ? 'rank_math_title' : 'rank_math_description';
+
+				return array(
+					'relation' => 'OR',
+					array(
+						'key'     => $key,
+						'compare' => 'NOT EXISTS',
+					),
+					array(
+						'key'   => $key,
+						'value' => '',
+					),
+				);
+		}
+
+		return array();
+	}
+
+	/**
+	 * The settings group holding the sitemap switches, for permission checks.
+	 *
+	 * @return string Group key.
+	 */
+	public static function sitemap_group(): string {
+		return 'sitemap';
 	}
 
 	/**

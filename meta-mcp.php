@@ -20,7 +20,7 @@
  * @wordpress-plugin
  * Plugin Name:       Meta MCP
  * Description:       Model Context Protocol server for WordPress. Exposes abilities as MCP tools, and adds content, navigation menu, Elementor and Polylang editing and publishing tools.
- * Version:           1.7.0
+ * Version:           1.8.0
  * Requires at least: 6.9
  * Tested up to:      7.0
  * Requires PHP:      7.4
@@ -38,27 +38,25 @@ namespace WP\MCP;
 // Exit if accessed directly.
 defined( 'ABSPATH' ) || exit();
 
-/**
- * Define the plugin constants.
- */
-function constants(): void {
-	/**
-	 * Shortcut constant to the path of this file.
-	 */
-	define( 'META_MCP_DIR', plugin_dir_path( __FILE__ ) );
-
-	/**
-	 * Version of the plugin.
-	 */
-	define( 'META_MCP_VERSION', '1.7.0' );
-
-	/**
-	 * Version of the upstream MCP Adapter this fork is based on.
-	 */
-	define( 'META_MCP_UPSTREAM_VERSION', '0.6.1' );
+// Another copy of this plugin (a second folder, e.g. "meta-mcp" beside
+// "meta-mcp-main") is already loaded: stop here rather than redeclare its
+// functions and classes, which is a fatal error on every request.
+if ( defined( 'META_MCP_VERSION' ) ) {
+	return;
 }
 
-constants();
+// Plugin constants. Defined inline rather than in a function: a top-level
+// function is declared when the file is compiled, before the guard above runs,
+// so a second copy of the plugin would still fail on redeclaring it.
+
+// Shortcut constant to the path of this file.
+define( 'META_MCP_DIR', plugin_dir_path( __FILE__ ) );
+
+// Version of the plugin.
+define( 'META_MCP_VERSION', '1.8.0' );
+
+// Version of the upstream MCP Adapter this fork is based on.
+define( 'META_MCP_UPSTREAM_VERSION', '0.6.1' );
 
 // Updates come from GitHub releases rather than WordPress.org. Registered
 // before the autoloader check so that a broken or missing `vendor` directory,

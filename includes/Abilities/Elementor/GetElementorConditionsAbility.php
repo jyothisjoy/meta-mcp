@@ -58,7 +58,7 @@ final class GetElementorConditionsAbility {
 							'type'  => 'array',
 							'items' => array( 'type' => 'string' ),
 						),
-						'language'      => array( 'type' => 'object' ),
+						'language'      => array( 'type' => array( 'object', 'null' ) ),
 						'error'         => array( 'type' => 'string' ),
 						'error_code'    => array( 'type' => 'string' ),
 					),

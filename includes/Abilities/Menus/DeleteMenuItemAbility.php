@@ -41,7 +41,7 @@ final class DeleteMenuItemAbility {
 							'description' => 'The menu item id, as returned by get-menu.',
 						),
 						'menu'            => array(
-							'type'        => 'string',
+							'type'        => array( 'integer', 'string' ),
 							'description' => 'Optional menu ID, slug or name to check the item belongs to.',
 						),
 						'delete_children' => array(

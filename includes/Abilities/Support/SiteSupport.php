@@ -44,7 +44,85 @@ final class SiteSupport {
 		'default_comment_status' => 'enum:open|closed',
 		'default_ping_status'    => 'enum:open|closed',
 		'site_icon'              => 'attachment',
+		// General.
+		'WPLANG'                 => 'locale',
+		// Reading.
+		'blog_public'            => 'bool',
+		// Permalinks.
+		'permalink_structure'    => 'permalink',
+		'category_base'          => 'base',
+		'tag_base'               => 'base',
+		// Discussion.
+		'default_pingback_flag'          => 'bool',
+		'require_name_email'             => 'bool',
+		'comment_registration'           => 'bool',
+		'close_comments_for_old_posts'   => 'bool',
+		'close_comments_days_old'        => 'int',
+		'show_comments_cookies_opt_in'   => 'bool',
+		'thread_comments'                => 'bool',
+		'thread_comments_depth'          => 'int',
+		'page_comments'                  => 'bool',
+		'comments_per_page'              => 'int',
+		'default_comments_page'          => 'enum:newest|oldest',
+		'comment_order'                  => 'enum:asc|desc',
+		'comments_notify'                => 'bool',
+		'moderation_notify'              => 'bool',
+		'comment_moderation'             => 'bool',
+		'comment_previously_approved'    => 'bool',
+		'comment_max_links'              => 'int',
+		'moderation_keys'                => 'textarea',
+		'disallowed_keys'                => 'textarea',
+		'show_avatars'                   => 'bool',
+		'avatar_rating'                  => 'enum:G|PG|R|X',
+		'avatar_default'                 => 'enum:mystery|blank|gravatar_default|identicon|wavatar|monsterid|retro|robohash',
+		// Media.
+		'thumbnail_size_w'               => 'int',
+		'thumbnail_size_h'               => 'int',
+		'thumbnail_crop'                 => 'bool',
+		'medium_size_w'                  => 'int',
+		'medium_size_h'                  => 'int',
+		'large_size_w'                   => 'int',
+		'large_size_h'                   => 'int',
+		'uploads_use_yearmonth_folders'  => 'bool',
+		// Privacy.
+		'wp_page_for_privacy_policy'     => 'page',
 	);
+
+	/**
+	 * Settings whose change needs the rewrite rules rebuilt.
+	 */
+	public const REWRITE_SETTINGS = array( 'permalink_structure', 'category_base', 'tag_base' );
+
+	/**
+	 * Warnings shown when a setting changes, so the client can relay the consequence.
+	 *
+	 * @param string $option The option.
+	 * @param mixed  $value  The new value.
+	 *
+	 * @return string The warning, or an empty string.
+	 */
+	public static function change_warning( string $option, $value ): string {
+		switch ( $option ) {
+			case 'blog_public':
+				return (int) $value
+					? 'Search engines are allowed to index the site again.'
+					: 'Search engines are now asked NOT to index this site ("Discourage search engines"). Use only on staging sites; on a live site this removes it from search results over time.';
+			case 'permalink_structure':
+			case 'category_base':
+			case 'tag_base':
+				return 'Every URL of this kind changes. WordPress redirects old post URLs only in some cases; add redirects (redirects-create) for any changed URL that has links or rankings, and purge the page cache.';
+			case 'comment_registration':
+				return (int) $value ? 'Only logged-in users can comment now.' : '';
+			case 'WPLANG':
+				return 'The admin and front-end language changes for everyone who has not chosen their own.';
+		}
+
+		if ( false !== strpos( $option, '_size_' ) || 'thumbnail_crop' === $option ) {
+			return 'Only images uploaded from now on use the new size; existing images keep theirs until thumbnails are regenerated.';
+		}
+
+		return '';
+	}
 
 	/**
 	 * Option keys that are never exposed, even through the filter.
@@ -134,6 +212,67 @@ final class SiteSupport {
 
 			case 'bool':
 				return ContentSupport::to_bool( $value, false ) ? 1 : 0;
+
+			case 'textarea':
+				if ( ! is_scalar( $value ) && ! is_array( $value ) ) {
+					return new WP_Error( 'invalid_value', 'Expected a string, one entry per line, or a list.' );
+				}
+
+				$lines = is_array( $value ) ? array_filter( $value, 'is_scalar' ) : preg_split( '/\r\n|\r|\n/', (string) $value );
+
+				return implode( "\n", array_filter( array_map( static fn( $line ): string => sanitize_text_field( (string) $line ), $lines ), 'strlen' ) );
+
+			case 'locale':
+				$value = (string) $value;
+
+				// "" and "en_US" both mean English (United States), which is always available.
+				if ( '' === $value || 'en_US' === $value ) {
+					return '';
+				}
+
+				if ( ! function_exists( 'get_available_languages' ) || ! in_array( $value, get_available_languages(), true ) ) {
+					return new WP_Error(
+						'invalid_value',
+						sprintf(
+							'"%s" is not installed on this site. Installed: en_US, %s. Install a language under Settings → General first.',
+							$value,
+							implode( ', ', function_exists( 'get_available_languages' ) ? get_available_languages() : array() )
+						)
+					);
+				}
+
+				return $value;
+
+			case 'permalink':
+				$value = trim( (string) $value );
+
+				// Empty means plain permalinks (?p=123).
+				if ( '' === $value ) {
+					return '';
+				}
+
+				global $wp_rewrite;
+
+				$value = '/' . ltrim( preg_replace( '#/+#', '/', $value ), '/' );
+				preg_match_all( '/%[a-z_]+%/', $value, $tags );
+				$known = isset( $wp_rewrite->rewritecode ) ? (array) $wp_rewrite->rewritecode : array();
+
+				if ( empty( $tags[0] ) ) {
+					return new WP_Error( 'invalid_value', 'A permalink structure needs at least one tag, e.g. "/%postname%/" or "/%year%/%monthnum%/%postname%/". Use "" for plain permalinks.' );
+				}
+
+				$unknown = empty( $known ) ? array() : array_diff( $tags[0], $known );
+
+				if ( ! empty( $unknown ) ) {
+					return new WP_Error( 'invalid_value', sprintf( 'Unknown permalink tag(s): %s.', implode( ', ', $unknown ) ) );
+				}
+
+				return (string) sanitize_option( 'permalink_structure', $value );
+
+			case 'base':
+				$value = trim( (string) $value, " /\t\n" );
+
+				return '' === $value ? '' : (string) sanitize_option( 'category_base', '/' . $value );
 
 			case 'timezone':
 				$value = (string) $value;
@@ -287,6 +426,50 @@ final class SiteSupport {
 		return array(
 			'purged'  => $purged,
 			'skipped' => $skipped,
+		);
+	}
+
+	/**
+	 * Rebuilds the rewrite rules in a normal front-end request.
+	 *
+	 * flush_rewrite_rules() inside this REST request rebuilt the rules without the
+	 * ones some plugins add only on a front-end load (Polylang's language rules
+	 * among them), and tag and term archives started returning 404 until someone
+	 * opened Settings → Permalinks. Clearing the stored rules makes WordPress
+	 * rebuild them on the next request, and a loopback request to the homepage
+	 * makes that next request an ordinary front-end one, straight away.
+	 *
+	 * @return array{loopback_status: int, ok: bool, note: string} What happened.
+	 */
+	public static function rebuild_rewrite_rules(): array {
+		delete_option( 'rewrite_rules' );
+
+		$response = wp_remote_get(
+			add_query_arg( 'mcp-rewrite-rebuild', (string) time(), home_url( '/' ) ),
+			array(
+				'timeout'   => 30,
+				'blocking'  => true,
+				// Same filter WordPress core uses for its own loopback requests.
+				'sslverify' => (bool) apply_filters( 'https_local_ssl_verify', false ),
+				'headers'   => array( 'Cache-Control' => 'no-cache' ),
+			)
+		);
+
+		$status = is_wp_error( $response ) ? 0 : (int) wp_remote_retrieve_response_code( $response );
+
+		// The loopback wrote the rules in another process; drop this request's cached copy before checking.
+		wp_cache_delete( 'rewrite_rules', 'options' );
+		wp_cache_delete( 'notoptions', 'options' );
+		wp_cache_delete( 'alloptions', 'options' );
+
+		$ok     = $status > 0 && $status < 500 && false !== get_option( 'rewrite_rules' ) && ! empty( get_option( 'rewrite_rules' ) );
+
+		return array(
+			'loopback_status' => $status,
+			'ok'              => $ok,
+			'note'            => $ok
+				? 'Rewrite rules rebuilt by a front-end request.'
+				: 'The rewrite rules are rebuilt on the next page visit. If archives return 404, open Settings → Permalinks once in wp-admin.',
 		);
 	}
 }

@@ -13,6 +13,7 @@ use WP\MCP\Abilities\Support\ContentSupport;
 use WP\MCP\Abilities\Support\ElementorSupport;
 use WP\MCP\Abilities\Support\MenuSupport;
 use WP\MCP\Abilities\Support\PolylangSupport;
+use WP\MCP\Abilities\Support\SeoBackend;
 use WP\MCP\Abilities\Support\Settings;
 
 // Exit if accessed directly.
@@ -206,10 +207,51 @@ final class SettingsPage {
 								<input type="checkbox"
 									name="<?php echo esc_attr( Settings::OPTION ); ?>[site_tools_enabled]"
 									value="1" <?php checked( ! empty( $settings['site_tools_enabled'] ) ); ?> />
-								<?php esc_html_e( 'Expose the tools for site settings, Rank Math SEO, Redirection rules, Elementor Custom Code and cache purging', 'meta-mcp' ); ?>
+								<?php esc_html_e( 'Expose the tools for site settings and health, Rank Math or Yoast SEO, redirects, Elementor Custom Code and global kit, Polylang string translations, LiteSpeed settings and cache purging', 'meta-mcp' ); ?>
 							</label>
 							<p class="description">
 								<?php esc_html_e( 'These change the whole site rather than one post, so they have their own switch. Each still requires the capability the matching wp-admin screen needs, which by default only an administrator has; writing a Custom Code snippet also requires "Unfiltered HTML".', 'meta-mcp' ); ?>
+							</p>
+						</td>
+					</tr>
+
+					<tr>
+						<th scope="row"><?php esc_html_e( 'Comments', 'meta-mcp' ); ?></th>
+						<td>
+							<label>
+								<input type="checkbox"
+									name="<?php echo esc_attr( Settings::OPTION ); ?>[comments_enabled]"
+									value="1" <?php checked( ! empty( $settings['comments_enabled'] ) ); ?> />
+								<?php esc_html_e( 'Expose the tools for listing, moderating, replying to and deleting comments', 'meta-mcp' ); ?>
+							</label>
+							<p class="description">
+								<?php esc_html_e( 'Moderation needs the "Moderate Comments" capability. Commenter IP addresses and browser details are never returned.', 'meta-mcp' ); ?>
+							</p>
+						</td>
+					</tr>
+
+					<tr>
+						<th scope="row"><?php esc_html_e( 'Form submissions', 'meta-mcp' ); ?></th>
+						<td>
+							<label>
+								<input type="checkbox"
+									name="<?php echo esc_attr( Settings::OPTION ); ?>[forms_enabled]"
+									value="1" <?php checked( ! empty( $settings['forms_enabled'] ) ); ?> />
+								<?php esc_html_e( 'Expose read-only tools for Elementor form submissions', 'meta-mcp' ); ?>
+							</label>
+							<p class="description">
+								<?php esc_html_e( 'Off by default: submissions hold what visitors typed into your forms, such as names, emails and phone numbers. Only administrators can read them, and IP addresses and browser details are never returned.', 'meta-mcp' ); ?>
+							</p>
+						</td>
+					</tr>
+
+					<tr>
+						<th scope="row"><label for="meta-mcp-protected-meta"><?php esc_html_e( 'Writable protected fields', 'meta-mcp' ); ?></label></th>
+						<td>
+							<textarea id="meta-mcp-protected-meta" class="large-text code" rows="4"
+								name="<?php echo esc_attr( Settings::OPTION ); ?>[writable_protected_meta]"><?php echo esc_textarea( implode( "\n", Settings::writable_protected_meta() ) ); ?></textarea>
+							<p class="description">
+								<?php esc_html_e( 'Custom fields whose names start with an underscore are hidden from MCP writes by default. List the ones the tools may change, one per line; end a line with * to allow every key that starts with it, e.g. _room_*. Fields owned by Elementor, Rank Math, Yoast and Polylang stay blocked: use their own tools.', 'meta-mcp' ); ?>
 							</p>
 						</td>
 					</tr>
@@ -290,6 +332,9 @@ final class SettingsPage {
 					implode( ', ', PolylangSupport::language_slugs() )
 				)
 				: __( 'Not active — the translation tools will report this', 'meta-mcp' ),
+			__( 'SEO plugin', 'meta-mcp' )       => class_exists( SeoBackend::class ) && SeoBackend::any_active()
+				? implode( ', ', SeoBackend::active() )
+				: __( 'Neither Rank Math nor Yoast is active — the SEO tools will report this', 'meta-mcp' ),
 		);
 		?>
 		<div class="card" style="max-width:none;padding:.6em 1.2em;margin-top:1em;">

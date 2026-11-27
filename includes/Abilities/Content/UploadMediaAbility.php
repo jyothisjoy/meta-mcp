@@ -209,11 +209,14 @@ final class UploadMediaAbility {
 	/**
 	 * Places the incoming file in a temporary location for sideloading.
 	 *
+	 * Shared with replace-media, which accepts the same source_url, base64_data
+	 * and filename inputs.
+	 *
 	 * @param array $input Input parameters.
 	 *
 	 * @return array{name: string, tmp_name: string}|\WP_Error The sideload descriptor, or WP_Error.
 	 */
-	private static function stage_file( array $input ) {
+	public static function stage_file( array $input ) {
 		$source_url = isset( $input['source_url'] ) ? (string) $input['source_url'] : '';
 		$base64     = isset( $input['base64_data'] ) ? (string) $input['base64_data'] : '';
 
@@ -244,10 +247,22 @@ final class UploadMediaAbility {
 			);
 		}
 
-		$tmp = download_url( $source_url );
+		// 60 seconds, not the default 300: a slow or endless URL must not hold a PHP worker.
+		$tmp = download_url( $source_url, 60 );
 
 		if ( is_wp_error( $tmp ) ) {
 			return $tmp;
+		}
+
+		$max = (int) wp_max_upload_size();
+
+		if ( $max > 0 && (int) filesize( $tmp ) > $max ) {
+			self::cleanup( $tmp );
+
+			return new WP_Error(
+				'file_too_large',
+				sprintf( 'The file at source_url is larger than this site accepts for uploads (%s).', size_format( $max ) )
+			);
 		}
 
 		if ( '' === $filename ) {
@@ -354,7 +369,7 @@ final class UploadMediaAbility {
 	 *
 	 * @return void
 	 */
-	private static function cleanup( string $path ): void {
+	public static function cleanup( string $path ): void {
 		if ( '' === $path || ! file_exists( $path ) ) {
 			return;
 		}

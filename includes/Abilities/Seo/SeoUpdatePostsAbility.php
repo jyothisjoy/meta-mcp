@@ -1,6 +1,6 @@
 <?php
 /**
- * Ability for writing the Rank Math SEO fields of posts, one or many at a time.
+ * Ability for writing the SEO fields (Rank Math or Yoast SEO) of posts, one or many at a time.
  *
  * @package McpAdapter
  */
@@ -11,14 +11,14 @@ namespace WP\MCP\Abilities\Seo;
 
 use WP\MCP\Abilities\Support\AbilityRegistrar;
 use WP\MCP\Abilities\Support\ContentSupport;
-use WP\MCP\Abilities\Support\RankMathSupport;
+use WP\MCP\Abilities\Support\SeoBackend;
 use WP_Error;
 
 // Exit if accessed directly.
 defined( 'ABSPATH' ) || exit;
 
 /**
- * SEO Update Posts - Writes Rank Math SEO fields on one or many posts in one call.
+ * SEO Update Posts - Writes Rank Math or Yoast SEO fields on one or many posts in one call.
  *
  * Batching is the point: a typical SEO pass clears canonicals on a dozen posts,
  * rewrites titles on a dozen pages and noindexes a handful of account pages,
@@ -44,14 +44,14 @@ final class SeoUpdatePostsAbility {
 					'description' => 'The post to change.',
 				),
 			),
-			RankMathSupport::post_field_schema()
+			SeoBackend::post_field_schema()
 		);
 
 		AbilityRegistrar::register(
 			'seo-update-posts',
 			array(
-				'label'               => 'Update Rank Math SEO Fields',
-				'description'         => 'Write Rank Math SEO fields on up to 100 posts in one call: SEO title, meta description, focus keyword, canonical URL, robots, advanced robots, breadcrumb title and social fields. Only the fields you pass are changed. Passing null or an empty value clears a field so Rank Math falls back to its default: clearing canonical_url makes the page canonical to itself, and clearing robots lets the post type default from Titles & Meta apply (use this when a sitewide noindex is overridden by pages that carry their own "index"). Each post is checked and reported separately. Set dry_run to validate without saving. Page caches (LiteSpeed etc.) are not purged; call purge-cache afterwards.',
+				'label'               => 'Update SEO Fields',
+				'description'         => 'Write SEO fields in the active SEO plugin (Rank Math or Yoast) on up to 100 posts per call. advanced_robots and twitter_use_facebook are Rank Math only; twitter_image and schema_* are Yoast only; unsupported fields are listed under "ignored". Only passed fields change. null or empty clears a field back to the plugin default: canonical_url becomes the page itself, robots falls back to the post type default (use this when pages carry their own "index" over a sitewide noindex). Each post is validated and reported separately; one bad field means nothing is written for that post. dry_run validates without saving. Call purge-cache afterwards.',
 				'input_schema'        => array(
 					'type'       => 'object',
 					'properties' => array(
@@ -68,6 +68,7 @@ final class SeoUpdatePostsAbility {
 							'type'        => 'boolean',
 							'description' => 'Validate and report what would change without saving anything. Default false.',
 						),
+						'provider' => SeoBackend::provider_schema(),
 					),
 					'required'   => array( 'posts' ),
 				),
@@ -75,6 +76,7 @@ final class SeoUpdatePostsAbility {
 					'type'       => 'object',
 					'properties' => array(
 						'success'    => array( 'type' => 'boolean' ),
+						'provider'   => array( 'type' => 'string' ),
 						'dry_run'    => array( 'type' => 'boolean' ),
 						'results'    => array( 'type' => 'array' ),
 						'updated'    => array( 'type' => 'integer' ),
@@ -101,10 +103,11 @@ final class SeoUpdatePostsAbility {
 	 * @return array<string, mixed> The per-post outcome.
 	 */
 	public static function execute( $input = array() ): array {
-		$active = RankMathSupport::require_active();
+		$input   = is_array( $input ) ? $input : array();
+		$backend = SeoBackend::resolve( $input );
 
-		if ( is_wp_error( $active ) ) {
-			return AbilityRegistrar::failure( $active );
+		if ( is_wp_error( $backend ) ) {
+			return AbilityRegistrar::failure( $backend );
 		}
 
 		$items = isset( $input['posts'] ) && is_array( $input['posts'] ) ? array_values( $input['posts'] ) : array();
@@ -139,27 +142,29 @@ final class SeoUpdatePostsAbility {
 				continue;
 			}
 
-			$changes = array_intersect_key( $item, RankMathSupport::POST_FIELDS );
+			$changes = array_intersect_key( $item, $backend::POST_FIELDS );
+			$ignored = array_values( array_diff( array_keys( $item ), array_keys( $backend::POST_FIELDS ), array( 'post_id' ) ) );
 
 			if ( empty( $changes ) ) {
 				++$failed;
 				$results[] = array(
 					'post_id' => $post->ID,
 					'success' => false,
-					'error'   => sprintf( 'No SEO fields given. Pass any of: %s.', implode( ', ', array_keys( RankMathSupport::POST_FIELDS ) ) ),
+					'error'   => sprintf( 'No SEO fields given. Pass any of: %s.', implode( ', ', array_keys( $backend::POST_FIELDS ) ) ),
+					'ignored' => $ignored,
 				);
 				continue;
 			}
 
-			$before = $dry_run ? RankMathSupport::read_post( $post )['seo'] : null;
+			$before = $dry_run ? $backend::read_post( $post )['seo'] : null;
 
 			// Validate every field before writing any, so a post is never left
 			// half-updated because one of its fields was rejected.
-			$write = RankMathSupport::write_post( $post, $changes, true );
+			$write = $backend::write_post( $post, $changes, true );
 			$ok    = empty( $write['errors'] );
 
 			if ( $ok && ! $dry_run ) {
-				$write = RankMathSupport::write_post( $post, $changes, false );
+				$write = $backend::write_post( $post, $changes, false );
 			}
 
 			if ( $ok ) {
@@ -177,20 +182,33 @@ final class SeoUpdatePostsAbility {
 				'errors'  => (object) $write['errors'],
 			);
 
+			if ( ! empty( $ignored ) ) {
+				$entry['ignored'] = $ignored;
+			}
+
+			if ( isset( $write['indexable_rebuilt'] ) ) {
+				$entry['indexable_rebuilt'] = (bool) $write['indexable_rebuilt'];
+			}
+
 			if ( $dry_run ) {
 				$entry['current'] = array_intersect_key( (array) $before, $changes );
 			} else {
-				$after             = RankMathSupport::read_post( $post );
+				$after             = $backend::read_post( $post );
 				$entry['seo']      = array_intersect_key( $after['seo'], $changes );
 				$entry['effective'] = $after['effective'];
+
+				if ( isset( $after['indexable'] ) ) {
+					$entry['indexable'] = $after['indexable'];
+				}
 			}
 
 			$results[] = $entry;
 		}
 
 		return array(
-			'success' => true,
-			'dry_run' => $dry_run,
+			'success'  => true,
+			'provider' => SeoBackend::name_of( $backend ),
+			'dry_run'  => $dry_run,
 			'results' => $results,
 			'updated' => $updated,
 			'failed'  => $failed,

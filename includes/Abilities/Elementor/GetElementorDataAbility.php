@@ -88,6 +88,10 @@ final class GetElementorDataAbility {
 			return AbilityRegistrar::failure( $post );
 		}
 
+		if ( ! ContentSupport::can_see_protected_content( $post ) ) {
+			return AbilityRegistrar::failure( new \WP_Error( 'content_protected', sprintf( 'Post %d is password protected; its layout is only shown to users who can edit it.', $post->ID ) ) );
+		}
+
 		$elements = ElementorSupport::get_elements( $post->ID );
 
 		if ( is_wp_error( $elements ) ) {

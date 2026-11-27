@@ -19,7 +19,9 @@ use WP\MCP\Abilities\Support\RankMathSupport;
 use WP\MCP\Abilities\Support\RankMathRedirectsSupport;
 use WP\MCP\Abilities\Support\RedirectionSupport;
 use WP\MCP\Abilities\Support\RedirectsBackend;
+use WP\MCP\Abilities\Support\SeoBackend;
 use WP\MCP\Abilities\Support\Settings;
+use WP\MCP\Abilities\Support\YoastSupport;
 use WP\MCP\Abilities\Support\UserSupport;
 
 // Exit if accessed directly.
@@ -134,6 +136,14 @@ final class IntegrationsStatusAbility {
 					'active'  => RankMathSupport::is_active(),
 					'version' => RankMathSupport::version(),
 				),
+				'yoast'               => array(
+					'active'  => YoastSupport::is_active(),
+					'version' => YoastSupport::version(),
+				),
+				// What the seo-* abilities use without a "provider" input (null: neither is active).
+				'seo_provider'        => SeoBackend::active()[0] ?? null,
+				'comments_enabled'    => Settings::comments_enabled(),
+				'forms_enabled'       => Settings::forms_enabled(),
 				'redirection'         => array(
 					'active'  => RedirectionSupport::is_active(),
 					'version' => RedirectionSupport::version(),

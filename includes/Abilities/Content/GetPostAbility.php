@@ -12,6 +12,7 @@ namespace WP\MCP\Abilities\Content;
 use WP\MCP\Abilities\Support\AbilityRegistrar;
 use WP\MCP\Abilities\Support\ContentSupport;
 use WP\MCP\Abilities\Support\ElementorSupport;
+use WP\MCP\Abilities\Support\MetaSupport;
 use WP_Error;
 
 // Exit if accessed directly.
@@ -59,6 +60,10 @@ final class GetPostAbility {
 						'include_meta'         => array(
 							'type'        => 'boolean',
 							'description' => 'Include public custom fields. Default false.',
+						),
+						'include_protected_meta' => array(
+							'type'        => 'boolean',
+							'description' => 'Also return underscore-prefixed custom fields in protected_meta, each flagged writable for set-post-meta. Secret-looking values and the Elementor layout are omitted; long values truncated. Needs edit permission. Default false.',
 						),
 						'include_terms'        => array(
 							'type'        => 'boolean',
@@ -118,11 +123,25 @@ final class GetPostAbility {
 			)
 		);
 
-		if ( ContentSupport::to_bool( $input['include_rendered'] ?? null, false ) ) {
+		if ( ContentSupport::to_bool( $input['include_protected_meta'] ?? null, false ) ) {
+			if ( current_user_can( 'edit_post', $post->ID ) ) {
+				$data['protected_meta'] = (object) MetaSupport::read_protected_meta( $post->ID, $post->post_type );
+			} else {
+				$data['protected_meta_error'] = 'Protected custom fields are only shown to users who can edit this post.';
+			}
+		}
+
+		$protected = ! ContentSupport::can_see_protected_content( $post );
+
+		if ( $protected ) {
+			$data['content_protected'] = true;
+		}
+
+		if ( ! $protected && ContentSupport::to_bool( $input['include_rendered'] ?? null, false ) ) {
 			$data['rendered_content'] = self::render_content( $post->post_content );
 		}
 
-		if ( ContentSupport::to_bool( $input['include_elementor'] ?? null, true ) && ElementorSupport::is_built_with_elementor( $post->ID ) ) {
+		if ( ! $protected && ContentSupport::to_bool( $input['include_elementor'] ?? null, true ) && ElementorSupport::is_built_with_elementor( $post->ID ) ) {
 			$elements = ElementorSupport::get_elements( $post->ID );
 
 			$data['elementor']['element_count'] = is_wp_error( $elements )

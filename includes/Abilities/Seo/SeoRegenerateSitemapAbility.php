@@ -1,6 +1,6 @@
 <?php
 /**
- * Ability for regenerating Rank Math's XML sitemaps.
+ * Ability for regenerating the SEO plugin's (Rank Math or Yoast SEO) XML sitemaps.
  *
  * @package McpAdapter
  */
@@ -11,15 +11,16 @@ namespace WP\MCP\Abilities\Seo;
 
 use WP\MCP\Abilities\Support\AbilityRegistrar;
 use WP\MCP\Abilities\Support\ContentSupport;
-use WP\MCP\Abilities\Support\RankMathSupport;
+use WP\MCP\Abilities\Support\SeoBackend;
+use WP\MCP\Abilities\Support\SiteSupport;
 
 // Exit if accessed directly.
 defined( 'ABSPATH' ) || exit;
 
 /**
- * SEO Regenerate Sitemap - Clears Rank Math's sitemap cache, rebuilds it and checks the result.
+ * SEO Regenerate Sitemap - Clears the SEO plugin's sitemap cache, rebuilds it and checks the result.
  *
- * Rank Math caches each sitemap. After a post is trashed, made private,
+ * Rank Math and Yoast SEO cache each sitemap. After a post is trashed, made private,
  * redirected or noindexed, the cached sitemap can keep listing it until the
  * cache expires. This clears the cache, optionally fetches the sitemaps so
  * they are rebuilt at once, and can confirm that given URLs are, or are no
@@ -42,7 +43,7 @@ final class SeoRegenerateSitemapAbility {
 			'seo-regenerate-sitemap',
 			array(
 				'label'               => 'SEO Regenerate Sitemap',
-				'description'         => 'Regenerate Rank Math\'s XML sitemaps: clears its sitemap cache (all sitemaps, or only the types given, e.g. ["offer"]), then by default fetches the sitemap index and each sitemap so they are rebuilt immediately, and reports how many URLs each lists. Pass check_urls to confirm specific pages are, or are no longer, in the sitemaps - e.g. after set-post-status made a duplicate offer private, or a redirect was added. Use flush_rewrites if the sitemap URLs return 404.',
+				'description'         => 'Regenerate the SEO plugin\'s (Rank Math or Yoast SEO) XML sitemaps: clears its sitemap cache (all sitemaps, or only the types given, e.g. ["offer"]), then by default fetches the sitemap index and each sitemap so they are rebuilt immediately, and reports how many URLs each lists. Pass check_urls to confirm specific pages are, or are no longer, in the sitemaps - e.g. after set-post-status made a duplicate offer private, or a redirect was added. Use flush_rewrites if the sitemap URLs return 404.',
 				'input_schema'        => array(
 					'type'       => 'object',
 					'properties' => array(
@@ -64,12 +65,14 @@ final class SeoRegenerateSitemapAbility {
 							'type'        => 'boolean',
 							'description' => 'Also flush WordPress rewrite rules, for sitemaps that return 404. Default false.',
 						),
+						'provider'       => SeoBackend::provider_schema(),
 					),
 				),
 				'output_schema'       => array(
 					'type'       => 'object',
 					'properties' => array(
 						'success'   => array( 'type' => 'boolean' ),
+						'provider'  => array( 'type' => 'string' ),
 						'cleared'   => array( 'type' => 'array' ),
 						'index_url' => array( 'type' => 'string' ),
 						'sitemaps'  => array( 'type' => 'array' ),
@@ -97,14 +100,14 @@ final class SeoRegenerateSitemapAbility {
 	 * @return array<string, mixed> What was cleared and what the sitemaps now list.
 	 */
 	public static function execute( $input = array() ): array {
-		$input  = is_array( $input ) ? $input : array();
-		$active = RankMathSupport::require_active();
+		$input   = is_array( $input ) ? $input : array();
+		$backend = SeoBackend::resolve( $input );
 
-		if ( is_wp_error( $active ) ) {
-			return AbilityRegistrar::failure( $active );
+		if ( is_wp_error( $backend ) ) {
+			return AbilityRegistrar::failure( $backend );
 		}
 
-		$allowed = RankMathSupport::require_can_manage_settings( 'sitemap' );
+		$allowed = $backend::require_can_manage_settings( $backend::sitemap_group() );
 
 		if ( is_wp_error( $allowed ) ) {
 			return AbilityRegistrar::failure( $allowed );
@@ -117,14 +120,15 @@ final class SeoRegenerateSitemapAbility {
 		$notes = array();
 
 		if ( ContentSupport::to_bool( $input['flush_rewrites'] ?? false, false ) ) {
-			flush_rewrite_rules( false );
-			$notes[] = 'Rewrite rules flushed.';
+			$rebuild = SiteSupport::rebuild_rewrite_rules();
+			$notes[] = $rebuild['note'];
 		}
 
 		$response = array(
 			'success'   => true,
-			'cleared'   => RankMathSupport::flush_sitemap_cache( $types ),
-			'index_url' => RankMathSupport::sitemap_index_url(),
+			'provider'  => SeoBackend::name_of( $backend ),
+			'cleared'   => $backend::flush_sitemap_cache( $types ),
+			'index_url' => $backend::sitemap_index_url(),
 		);
 
 		if ( ! ContentSupport::to_bool( $input['warm'] ?? true, true ) ) {
@@ -145,8 +149,18 @@ final class SeoRegenerateSitemapAbility {
 		$sitemaps = array();
 		$listed   = array();
 
+		// An overall budget: one slow sitemap at a time, up to MAX_SITEMAPS of them,
+		// could otherwise outlast PHP's or the proxy's own time limit.
+		$deadline = microtime( true ) + 45;
+		$skipped  = array();
+
 		foreach ( array_slice( $children, 0, self::MAX_SITEMAPS ) as $child ) {
 			if ( ! empty( $types ) && ! self::is_type( $child, $types ) ) {
+				continue;
+			}
+
+			if ( microtime( true ) > $deadline ) {
+				$skipped[] = $child;
 				continue;
 			}
 
@@ -166,6 +180,10 @@ final class SeoRegenerateSitemapAbility {
 
 		if ( count( $children ) > self::MAX_SITEMAPS ) {
 			$notes[] = sprintf( 'Only the first %d of %d sitemaps were fetched.', self::MAX_SITEMAPS, count( $children ) );
+		}
+
+		if ( ! empty( $skipped ) ) {
+			$notes[] = sprintf( 'Stopped after 45 seconds; not fetched: %s. They rebuild when requested.', implode( ', ', $skipped ) );
 		}
 
 		$response['sitemaps'] = $sitemaps;

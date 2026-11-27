@@ -43,8 +43,8 @@ final class SetMenuItemsAbility {
 					'type'       => 'object',
 					'properties' => array(
 						'menu'  => array(
-							'type'        => 'string',
-							'description' => 'Menu ID, slug or name.',
+							'type'        => array( 'integer', 'string' ),
+							'description' => 'Menu ID (number, as list-menus returns it), slug or name.',
 						),
 						'items' => array(
 							'type'        => 'array',
@@ -194,6 +194,11 @@ final class SetMenuItemsAbility {
 		$written = self::write_branch( (int) $menu->term_id, $validated, 0, $position, $created );
 
 		if ( is_wp_error( $written ) ) {
+			// Take back what this call already added, so a failure leaves the menu as it was.
+			foreach ( array_reverse( $created ) as $item_id ) {
+				wp_delete_post( (int) $item_id, true );
+			}
+
 			return $written;
 		}
 

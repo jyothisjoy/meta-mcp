@@ -9,6 +9,10 @@ declare( strict_types=1 );
 
 namespace WP\MCP\Abilities;
 
+use WP\MCP\Abilities\Comments\DeleteCommentAbility;
+use WP\MCP\Abilities\Comments\ListCommentsAbility;
+use WP\MCP\Abilities\Comments\ReplyCommentAbility;
+use WP\MCP\Abilities\Comments\UpdateCommentAbility;
 use WP\MCP\Abilities\Content\CreatePostAbility;
 use WP\MCP\Abilities\Content\DeletePostAbility;
 use WP\MCP\Abilities\Content\FindTextAbility;
@@ -17,6 +21,7 @@ use WP\MCP\Abilities\Content\IntegrationsStatusAbility;
 use WP\MCP\Abilities\Content\ListMediaAbility;
 use WP\MCP\Abilities\Content\ListPostsAbility;
 use WP\MCP\Abilities\Content\ListPostTypesAbility;
+use WP\MCP\Abilities\Content\ReplaceMediaAbility;
 use WP\MCP\Abilities\Content\ReplaceTextAbility;
 use WP\MCP\Abilities\Content\ResolveUrlAbility;
 use WP\MCP\Abilities\Content\SetPostMetaAbility;
@@ -25,6 +30,8 @@ use WP\MCP\Abilities\Content\SetPostTermsAbility;
 use WP\MCP\Abilities\Content\UpdateMediaAbility;
 use WP\MCP\Abilities\Content\UpdatePostAbility;
 use WP\MCP\Abilities\Content\UploadMediaAbility;
+use WP\MCP\Abilities\Elementor\ElementorGetKitAbility;
+use WP\MCP\Abilities\Elementor\ElementorUpdateKitAbility;
 use WP\MCP\Abilities\Elementor\GetCustomCodeAbility;
 use WP\MCP\Abilities\Elementor\GetElementorConditionsAbility;
 use WP\MCP\Abilities\Elementor\GetElementorDataAbility;
@@ -36,6 +43,8 @@ use WP\MCP\Abilities\Elementor\SetElementorConditionsAbility;
 use WP\MCP\Abilities\Elementor\SetElementorDataAbility;
 use WP\MCP\Abilities\Elementor\InsertElementorElementAbility;
 use WP\MCP\Abilities\Elementor\UpdateElementorElementAbility;
+use WP\MCP\Abilities\Forms\GetFormSubmissionAbility;
+use WP\MCP\Abilities\Forms\ListFormSubmissionsAbility;
 use WP\MCP\Abilities\Menus\AddMenuItemAbility;
 use WP\MCP\Abilities\Menus\CreateMenuAbility;
 use WP\MCP\Abilities\Menus\DeleteMenuAbility;
@@ -51,6 +60,8 @@ use WP\MCP\Abilities\Polylang\CreatePostTranslationAbility;
 use WP\MCP\Abilities\Polylang\GetPostTranslationsAbility;
 use WP\MCP\Abilities\Polylang\LinkPostTranslationsAbility;
 use WP\MCP\Abilities\Polylang\ListLanguagesAbility;
+use WP\MCP\Abilities\Polylang\ListStringTranslationsAbility;
+use WP\MCP\Abilities\Polylang\SetStringTranslationsAbility;
 use WP\MCP\Abilities\Polylang\SetPostLanguageAbility;
 use WP\MCP\Abilities\Polylang\SetTermLanguageAbility;
 use WP\MCP\Abilities\Polylang\SyncPostTranslationAbility;
@@ -58,20 +69,32 @@ use WP\MCP\Abilities\Redirects\CreateRedirectsAbility;
 use WP\MCP\Abilities\Redirects\DeleteRedirectsAbility;
 use WP\MCP\Abilities\Redirects\ListRedirectsAbility;
 use WP\MCP\Abilities\Redirects\UpdateRedirectAbility;
+use WP\MCP\Abilities\Revisions\GetRevisionAbility;
+use WP\MCP\Abilities\Revisions\ListRevisionsAbility;
+use WP\MCP\Abilities\Revisions\RestoreRevisionAbility;
 use WP\MCP\Abilities\Seo\SeoGetPostsAbility;
 use WP\MCP\Abilities\Seo\SeoGetSettingsAbility;
 use WP\MCP\Abilities\Seo\SeoRegenerateSitemapAbility;
 use WP\MCP\Abilities\Seo\SeoUpdatePostsAbility;
 use WP\MCP\Abilities\Seo\SeoUpdateSettingsAbility;
 use WP\MCP\Abilities\Site\GetSiteSettingsAbility;
+use WP\MCP\Abilities\Site\LitespeedGetSettingsAbility;
+use WP\MCP\Abilities\Site\LitespeedUpdateSettingsAbility;
+use WP\MCP\Abilities\Site\SiteHealthAbility;
 use WP\MCP\Abilities\Site\PurgeCacheAbility;
 use WP\MCP\Abilities\Site\UpdateSiteSettingsAbility;
 use WP\MCP\Abilities\Support\AbilityRegistrar;
 use WP\MCP\Abilities\Support\ElementorSupport;
+use WP\MCP\Abilities\Support\LitespeedSupport;
 use WP\MCP\Abilities\Support\PolylangSupport;
-use WP\MCP\Abilities\Support\RankMathSupport;
+use WP\MCP\Abilities\Support\SeoBackend;
 use WP\MCP\Abilities\Support\RedirectsBackend;
 use WP\MCP\Abilities\Support\Settings;
+use WP\MCP\Abilities\Terms\CreateTermAbility;
+use WP\MCP\Abilities\Terms\DeleteTermAbility;
+use WP\MCP\Abilities\Terms\GetTermAbility;
+use WP\MCP\Abilities\Terms\ListTermsAbility;
+use WP\MCP\Abilities\Terms\UpdateTermAbility;
 use WP\MCP\Abilities\Users\CreateUserAbility;
 use WP\MCP\Abilities\Users\DeleteUserAbility;
 use WP\MCP\Abilities\Users\GetUserAbility;
@@ -117,6 +140,25 @@ final class ContentAbilities {
 			UploadMediaAbility::class,
 			ListMediaAbility::class,
 			UpdateMediaAbility::class,
+			ReplaceMediaAbility::class,
+			ListTermsAbility::class,
+			GetTermAbility::class,
+			CreateTermAbility::class,
+			UpdateTermAbility::class,
+			DeleteTermAbility::class,
+			ListRevisionsAbility::class,
+			GetRevisionAbility::class,
+			RestoreRevisionAbility::class,
+		),
+		'comments'  => array(
+			ListCommentsAbility::class,
+			UpdateCommentAbility::class,
+			ReplyCommentAbility::class,
+			DeleteCommentAbility::class,
+		),
+		'forms'     => array(
+			ListFormSubmissionsAbility::class,
+			GetFormSubmissionAbility::class,
 		),
 		'menus'     => array(
 			ListMenusAbility::class,
@@ -147,11 +189,18 @@ final class ContentAbilities {
 			ListElementorTemplatesAbility::class,
 			GetElementorConditionsAbility::class,
 			SetElementorConditionsAbility::class,
+			ElementorGetKitAbility::class,
+			ElementorUpdateKitAbility::class,
 		),
 		'site'        => array(
 			GetSiteSettingsAbility::class,
 			UpdateSiteSettingsAbility::class,
 			PurgeCacheAbility::class,
+			SiteHealthAbility::class,
+		),
+		'litespeed'   => array(
+			LitespeedGetSettingsAbility::class,
+			LitespeedUpdateSettingsAbility::class,
 		),
 		'seo'         => array(
 			SeoGetPostsAbility::class,
@@ -179,6 +228,8 @@ final class ContentAbilities {
 			CreatePostTranslationAbility::class,
 			SetTermLanguageAbility::class,
 			SyncPostTranslationAbility::class,
+			ListStringTranslationsAbility::class,
+			SetStringTranslationsAbility::class,
 		),
 	);
 
@@ -198,6 +249,9 @@ final class ContentAbilities {
 
 		add_action( 'wp_abilities_api_categories_init', array( AbilityRegistrar::class, 'register_category' ) );
 		add_action( 'wp_abilities_api_init', array( self::class, 'register_abilities' ) );
+
+		// Smaller tool results on the content server, whichever adapter copy answers.
+		\WP\MCP\Abilities\Support\ResponseCompactor::register();
 
 		// Priority 20 so the default server is registered first and the route
 		// order stays predictable.
@@ -294,6 +348,44 @@ final class ContentAbilities {
 	}
 
 	/**
+	 * Whether the comment moderation abilities are registered on this site.
+	 *
+	 * @return bool True when they should be registered.
+	 */
+	private static function comments_enabled(): bool {
+		/**
+		 * Filters whether the MCP comment abilities are registered.
+		 *
+		 * Defaults to the value set on the Meta MCP settings screen.
+		 *
+		 * @since 1.8.0
+		 *
+		 * @param bool $enabled Whether to register the comment abilities.
+		 */
+		return (bool) apply_filters( 'mcp_adapter_comment_abilities_enabled', Settings::comments_enabled() );
+	}
+
+	/**
+	 * Whether the form submission abilities are registered on this site.
+	 *
+	 * Off by default: submissions are what visitors typed into forms, not content.
+	 *
+	 * @return bool True when they should be registered.
+	 */
+	private static function forms_enabled(): bool {
+		/**
+		 * Filters whether the MCP form submission abilities are registered.
+		 *
+		 * Defaults to the value set on the Meta MCP settings screen.
+		 *
+		 * @since 1.8.0
+		 *
+		 * @param bool $enabled Whether to register the form submission abilities.
+		 */
+		return (bool) apply_filters( 'mcp_adapter_form_abilities_enabled', Settings::forms_enabled() );
+	}
+
+	/**
 	 * Whether the site-wide abilities are registered on this site.
 	 *
 	 * Covers site settings, cache purging, Rank Math, Redirection and Elementor
@@ -341,15 +433,16 @@ final class ContentAbilities {
 		/**
 		 * Filters whether abilities for inactive integrations are still registered.
 		 *
-		 * Registering them means a client is told plainly that Elementor or
-		 * Polylang is missing. Return false to omit the tools instead, which
-		 * keeps the tool list shorter on sites that will never install them.
+		 * Off by default since 1.8.0: every listed tool costs a client tokens at
+		 * the start of each session, and content-integrations-status already says
+		 * which plugins are missing. Return true to list them anyway, so a client
+		 * is told plainly that Elementor or Polylang is missing.
 		 *
 		 * @since 0.6.1
 		 *
-		 * @param bool $register Whether to register abilities for inactive plugins. Default true.
+		 * @param bool $register Whether to register abilities for inactive plugins. Default false.
 		 */
-		$register_inactive = (bool) apply_filters( 'mcp_adapter_register_inactive_integrations', true );
+		$register_inactive = (bool) apply_filters( 'mcp_adapter_register_inactive_integrations', false );
 
 		$groups = array( 'core' );
 
@@ -359,6 +452,14 @@ final class ContentAbilities {
 
 		if ( self::users_enabled() ) {
 			$groups[] = 'users';
+		}
+
+		if ( self::comments_enabled() ) {
+			$groups[] = 'comments';
+		}
+
+		if ( self::forms_enabled() && ( $register_inactive || ElementorSupport::is_pro_active() ) ) {
+			$groups[] = 'forms';
 		}
 
 		if ( $register_inactive || ElementorSupport::is_active() ) {
@@ -372,7 +473,7 @@ final class ContentAbilities {
 		if ( self::site_tools_enabled() ) {
 			$groups[] = 'site';
 
-			if ( $register_inactive || RankMathSupport::is_active() ) {
+			if ( $register_inactive || SeoBackend::any_active() ) {
 				$groups[] = 'seo';
 			}
 
@@ -382,6 +483,10 @@ final class ContentAbilities {
 
 			if ( $register_inactive || ElementorSupport::is_pro_active() ) {
 				$groups[] = 'custom_code';
+			}
+
+			if ( $register_inactive || LitespeedSupport::is_active() ) {
+				$groups[] = 'litespeed';
 			}
 		}
 

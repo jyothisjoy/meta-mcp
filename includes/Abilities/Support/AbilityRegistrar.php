@@ -111,7 +111,22 @@ final class AbilityRegistrar {
 		}
 
 		if ( isset( $args['output_schema'] ) ) {
-			$definition['output_schema'] = $args['output_schema'];
+			/**
+			 * Filters whether a content ability declares its output schema.
+			 *
+			 * Off by default since 1.8.0. A declared schema is listed in tools/list,
+			 * which every MCP client reads at the start of each session (about a
+			 * sixth of the list), and obliges the server to send each result twice.
+			 * The schema is still used below to shape results.
+			 *
+			 * @since 1.8.0
+			 *
+			 * @param bool   $declare Whether to declare it. Default false.
+			 * @param string $name    Ability name.
+			 */
+			if ( apply_filters( 'mcp_adapter_content_declare_output_schema', false, $name ) ) {
+				$definition['output_schema'] = $args['output_schema'];
+			}
 
 			// PHP encodes an empty array as a JSON list, so a field the schema calls an object ("applied",
 			// "translations", "errors"...) came out as [] whenever it was empty, and MCP clients that check results

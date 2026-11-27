@@ -111,6 +111,9 @@ final class ListElementorTemplatesAbility {
 			'paged'          => isset( $input['page'] ) ? max( 1, (int) $input['page'] ) : 1,
 			'orderby'        => 'title',
 			'order'          => 'ASC',
+			// Every language, and private templates only for those who may read them.
+			'lang'           => '',
+			'perm'           => 'readable',
 		);
 
 		if ( ! empty( $input['search'] ) ) {

@@ -37,6 +37,10 @@ final class PolylangSupport {
 		'_wp_trash_meta_time',
 		'_pingme',
 		'_encloseme',
+		// A canonical points at one URL; copied, the translation would declare the
+		// source-language page as its canonical and drop out of the index.
+		'rank_math_canonical_url',
+		'_yoast_wpseo_canonical',
 	);
 
 	/**

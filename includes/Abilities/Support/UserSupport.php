@@ -51,6 +51,13 @@ final class UserSupport {
 	private const SECRET_FIELDS = array( 'user_pass', 'user_activation_key' );
 
 	/**
+	 * User meta never returned by include_meta: login sessions (IP, browser,
+	 * token hashes), location guesses, MCP sessions, roles and capabilities
+	 * (already reported as "roles"), and anything that looks like a credential.
+	 */
+	private const HIDDEN_META_PATTERN = '/^(session_tokens|community-events-location|mcp_adapter_sessions.*|.*capabilities|.*user_level|.*(token|secret|passw|api_?key|otp|2fa|two_factor|application_passwords).*)$/i';
+
+	/**
 	 * Whether the user abilities are switched on for this site.
 	 *
 	 * Registration is decided separately, in ContentAbilities; this is the
@@ -291,7 +298,7 @@ final class UserSupport {
 	 *
 	 * @return true|\WP_Error True when the role can be assigned, WP_Error otherwise.
 	 */
-	public static function validate_role( string $role ) {
+	public static function validate_role( string $role, int $user_id = 0 ) {
 		if ( '' === $role ) {
 			return new WP_Error( 'invalid_role', 'A role slug is required.' );
 		}
@@ -308,6 +315,24 @@ final class UserSupport {
 				'cannot_promote_users',
 				'User lacks the "promote_users" capability required to set a role.'
 			);
+		}
+
+		// Same limit as Users → Edit: only roles this user may hand out (the
+		// editable_roles filter is how sites stop a shop manager granting administrator).
+		if ( ! function_exists( 'get_editable_roles' ) ) {
+			require_once ABSPATH . 'wp-admin/includes/user.php';
+		}
+
+		if ( ! isset( get_editable_roles()[ $role ] ) ) {
+			return new WP_Error(
+				'role_not_assignable',
+				sprintf( 'You may not assign the "%s" role. Assignable: %s.', $role, implode( ', ', array_keys( get_editable_roles() ) ) )
+			);
+		}
+
+		// Changing an existing user's role also needs promote_user on that user.
+		if ( $user_id > 0 && ! current_user_can( 'promote_user', $user_id ) ) {
+			return new WP_Error( 'cannot_promote_user', sprintf( 'User cannot change the role of user %d.', $user_id ) );
 		}
 
 		return true;
@@ -390,7 +415,7 @@ final class UserSupport {
 		foreach ( $meta as $key => $values ) {
 			$key = (string) $key;
 
-			if ( '_' === substr( $key, 0, 1 ) || in_array( $key, self::SECRET_FIELDS, true ) ) {
+			if ( '_' === substr( $key, 0, 1 ) || in_array( $key, self::SECRET_FIELDS, true ) || preg_match( self::HIDDEN_META_PATTERN, (string) $key ) ) {
 				continue;
 			}
 

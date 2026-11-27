@@ -37,8 +37,8 @@ final class DeleteMenuAbility {
 					'type'       => 'object',
 					'properties' => array(
 						'menu'    => array(
-							'type'        => 'string',
-							'description' => 'Menu ID, slug or name.',
+							'type'        => array( 'integer', 'string' ),
+							'description' => 'Menu ID (number, as list-menus returns it), slug or name.',
 						),
 						'confirm' => array(
 							'type'        => 'boolean',

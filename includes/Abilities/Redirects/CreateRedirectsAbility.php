@@ -180,6 +180,33 @@ final class CreateRedirectsAbility {
 			);
 		}
 
+		// Loops: a target that leads back to its own source, through this batch or
+		// existing rules (/a -> /b with /b -> /a), would send visitors round forever.
+		$batch = array();
+
+		foreach ( $plan as $item ) {
+			$r = $item['rule'];
+
+			if ( ! ContentSupport::to_bool( $r['regex'] ?? false, false ) && ( ! isset( $r['match'] ) || 'exact' === $r['match'] ) && ! empty( $r['target'] ) ) {
+				$path = RedirectsBackend::local_path( (string) ( $r['source'] ?? '' ) );
+
+				if ( null !== $path ) {
+					$batch[ $path ] = (string) $r['target'];
+				}
+			}
+		}
+
+		foreach ( $batch as $path => $target ) {
+			$loop = RedirectsBackend::find_loop( $path, $target, $batch, $backend );
+
+			if ( null !== $loop ) {
+				$errors[] = array(
+					'source' => $path,
+					'error'  => sprintf( 'This would create a redirect loop: %s.', $loop ),
+				);
+			}
+		}
+
 		if ( ! empty( $errors ) ) {
 			return AbilityRegistrar::failure_with_details(
 				'No redirects were created because some rules were invalid.',

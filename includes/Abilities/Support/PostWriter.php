@@ -102,6 +102,12 @@ final class PostWriter {
 						if ( $existing && $parent_id === $existing->ID ) {
 							return new WP_Error( 'invalid_parent', 'A post cannot be its own parent.' );
 						}
+
+						// Core would "fix" the loop by quietly moving the descendant to the top
+						// level, changing its URL; refuse instead.
+						if ( $existing && in_array( (int) $existing->ID, array_map( 'intval', get_post_ancestors( $parent_id ) ), true ) ) {
+							return new WP_Error( 'invalid_parent', sprintf( 'Post %d is a descendant of post %d, so it cannot be its parent.', $parent_id, $existing->ID ) );
+						}
 					}
 
 					$postarr[ $column ] = $parent_id;

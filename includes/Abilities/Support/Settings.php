@@ -43,6 +43,12 @@ final class Settings {
 	 * Code snippets and cache purging. Every one of them still requires the
 	 * capability an administrator would need for the same screen in wp-admin.
 	 *
+	 * `forms_enabled` is off by default too: form submissions are what guests
+	 * typed into the site (names, emails, phone numbers), not site content.
+	 *
+	 * `writable_protected_meta` lists underscore-prefixed meta keys the meta
+	 * tools may write, one per entry; an entry ending in "*" is a prefix.
+	 *
 	 * @return array<string, mixed> The defaults.
 	 */
 	public static function defaults(): array {
@@ -53,6 +59,9 @@ final class Settings {
 			'menus_enabled'         => true,
 			'users_enabled'         => false,
 			'site_tools_enabled'    => true,
+			'comments_enabled'      => true,
+			'forms_enabled'         => false,
+			'writable_protected_meta' => array(),
 		);
 	}
 
@@ -137,6 +146,70 @@ final class Settings {
 	}
 
 	/**
+	 * Whether the comment moderation abilities are enabled in the settings.
+	 *
+	 * @return bool True when the comment tools should be registered.
+	 */
+	public static function comments_enabled(): bool {
+		$settings = self::get();
+
+		return ! empty( $settings['comments_enabled'] );
+	}
+
+	/**
+	 * Whether the form submission abilities are enabled in the settings.
+	 *
+	 * @return bool True when the form submission tools should be registered.
+	 */
+	public static function forms_enabled(): bool {
+		$settings = self::get();
+
+		return ! empty( $settings['forms_enabled'] );
+	}
+
+	/**
+	 * The protected meta keys and prefixes allowlisted for writing.
+	 *
+	 * @return string[] Keys; an entry ending in "*" is a prefix.
+	 */
+	public static function writable_protected_meta(): array {
+		$settings = self::get();
+
+		return is_array( $settings['writable_protected_meta'] ) ? array_values( array_map( 'strval', $settings['writable_protected_meta'] ) ) : array();
+	}
+
+	/**
+	 * Cleans the protected meta allowlist submitted from the settings screen.
+	 *
+	 * Accepts a newline or comma separated string or a list. Only keys that
+	 * start with an underscore are kept, since unprotected keys need no
+	 * allowlisting.
+	 *
+	 * @param mixed $value Raw value.
+	 *
+	 * @return string[] The cleaned keys.
+	 */
+	public static function sanitize_meta_keys( $value ): array {
+		$items = is_array( $value ) ? $value : preg_split( '/[
+,]+/', (string) $value );
+		$keys  = array();
+
+		foreach ( (array) $items as $item ) {
+			$item   = trim( (string) $item );
+			$prefix = '*' === substr( $item, -1 );
+			$key    = preg_replace( '/[^A-Za-z0-9_\-]/', '', $prefix ? substr( $item, 0, -1 ) : $item );
+
+			if ( '' === $key || '_' !== $key[0] || ( $prefix && strlen( $key ) < 3 ) ) {
+				continue;
+			}
+
+			$keys[] = $key . ( $prefix ? '*' : '' );
+		}
+
+		return array_values( array_unique( $keys ) );
+	}
+
+	/**
 	 * Validates a settings array submitted from the settings screen.
 	 *
 	 * @param mixed $input Raw submitted value.
@@ -159,6 +232,9 @@ final class Settings {
 			'menus_enabled'         => ! empty( $input['menus_enabled'] ),
 			'users_enabled'         => ! empty( $input['users_enabled'] ),
 			'site_tools_enabled'    => ! empty( $input['site_tools_enabled'] ),
+			'comments_enabled'      => ! empty( $input['comments_enabled'] ),
+			'forms_enabled'         => ! empty( $input['forms_enabled'] ),
+			'writable_protected_meta' => self::sanitize_meta_keys( $input['writable_protected_meta'] ?? array() ),
 		);
 	}
 }

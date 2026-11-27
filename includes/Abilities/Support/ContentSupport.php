@@ -257,6 +257,30 @@ final class ContentSupport {
 	}
 
 	/**
+	 * Whether visitors can see posts of this type: public, or publicly queryable.
+	 *
+	 * @param string $post_type Post type slug.
+	 *
+	 * @return bool True for a public type.
+	 */
+	public static function is_public_type( string $post_type ): bool {
+		$object = get_post_type_object( $post_type );
+
+		return $object instanceof \WP_Post_Type && ( ! empty( $object->public ) || ! empty( $object->publicly_queryable ) );
+	}
+
+	/**
+	 * Whether the current user may see a post's password-protected content.
+	 *
+	 * @param WP_Post $post The post.
+	 *
+	 * @return bool True when there is no password or the user can edit the post.
+	 */
+	public static function can_see_protected_content( WP_Post $post ): bool {
+		return '' === (string) $post->post_password || current_user_can( 'edit_post', $post->ID );
+	}
+
+	/**
 	 * Checks that the current user may read a specific post.
 	 *
 	 * @param mixed $post_id Post ID.
@@ -270,8 +294,22 @@ final class ContentSupport {
 			return $post;
 		}
 
-		if ( 'publish' === $post->post_status ) {
+		// "Published" only means "anyone may read it" for a post type the public can
+		// see. A plugin's internal type (form entries, bookings, logs) publishes rows
+		// that were never meant for subscribers.
+		if ( 'publish' === $post->post_status && self::is_public_type( $post->post_type ) ) {
 			return $post;
+		}
+
+		if ( 'publish' === $post->post_status ) {
+			if ( current_user_can( 'edit_post', $post->ID ) ) {
+				return $post;
+			}
+
+			return new WP_Error(
+				'cannot_read_post',
+				sprintf( 'User cannot read post %d: its post type is not public, so it needs edit permission.', $post->ID )
+			);
 		}
 
 		if ( ! current_user_can( 'read_post', $post->ID ) && ! current_user_can( 'edit_post', $post->ID ) ) {
@@ -374,6 +412,10 @@ final class ContentSupport {
 				'include_meta'      => false,
 				'include_language'  => true,
 				'include_elementor' => true,
+				// Lists: leave out what is derivable (edit_link, date_gmt) and give
+				// translations as {lang: id}, which is most of a row's size on a
+				// multilingual site.
+				'compact'           => false,
 			)
 		);
 
@@ -398,8 +440,16 @@ final class ContentSupport {
 			'comment_status' => $post->comment_status,
 		);
 
+		if ( $args['compact'] ) {
+			unset( $data['edit_link'], $data['date_gmt'] );
+		}
+
 		if ( $args['include_content'] ) {
-			$data['content'] = $post->post_content;
+			if ( self::can_see_protected_content( $post ) ) {
+				$data['content'] = $post->post_content;
+			} else {
+				$data['content_protected'] = true;
+			}
 		}
 
 		if ( $args['include_terms'] ) {
@@ -420,6 +470,11 @@ final class ContentSupport {
 		if ( $args['include_language'] && PolylangSupport::is_active() ) {
 			$data['language']     = PolylangSupport::get_post_language( $post->ID );
 			$data['translations'] = PolylangSupport::get_post_translations( $post->ID );
+
+			if ( $args['compact'] ) {
+				$data['language']     = $data['language']['slug'] ?? null;
+				$data['translations'] = array_map( static fn( $t ) => is_array( $t ) ? (int) ( $t['id'] ?? 0 ) : $t, (array) $data['translations'] );
+			}
 		}
 
 		return $data;
@@ -459,6 +514,34 @@ final class ContentSupport {
 		}
 
 		return $result;
+	}
+
+	/**
+	 * Validates a URL given for an SEO field (canonical, social image).
+	 *
+	 * esc_url_raw() alone turns "not a url" into "http://not%20a%20url", which
+	 * would be stored and printed as the canonical. A path starting with "/" is
+	 * taken as a URL on this site.
+	 *
+	 * @param string $value Incoming URL or site path.
+	 *
+	 * @return string|\WP_Error The absolute URL.
+	 */
+	public static function clean_absolute_url( string $value ) {
+		$value = trim( $value );
+
+		if ( '' !== $value && '/' === $value[0] && ( ! isset( $value[1] ) || '/' !== $value[1] ) ) {
+			$value = home_url( $value );
+		}
+
+		$clean = esc_url_raw( $value, array( 'http', 'https' ) );
+		$host  = '' === $clean ? '' : (string) wp_parse_url( $clean, PHP_URL_HOST );
+
+		if ( '' === $clean || '' === $host || ! filter_var( $clean, FILTER_VALIDATE_URL ) || ! preg_match( '/^[a-z0-9.-]+$/i', $host ) ) {
+			return new \WP_Error( 'invalid_url', sprintf( '"%s" is not a valid http(s) URL. Pass a full URL such as "https://example.com/page/", or a path on this site such as "/page/".', $value ) );
+		}
+
+		return $clean;
 	}
 
 	/**

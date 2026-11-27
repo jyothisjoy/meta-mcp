@@ -336,16 +336,24 @@ class ToolsHandler {
 			// `structuredContent`. Reading `_meta` off it would give one key two meanings,
 			// with nothing to tell metadata from a domain field.
 
-			// Standard result - JSON-encode for text content, include as structuredContent.
-			$json_text = wp_json_encode( $result );
+			// Standard result - JSON-encode for text content. Unescaped slashes and
+			// Unicode: "https:\/\/" and "ا" cost several times the tokens of the
+			// characters they stand for, and the text is read by a language model.
+			$json_text = wp_json_encode( $result, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE );
 			if ( false === $json_text ) {
 				$json_text = '{}';
 			}
 
+			// The same result as structuredContent only when the tool declares an
+			// outputSchema (the spec then requires it). Otherwise every result would
+			// travel twice, doubling what a client has to read.
+			$dto        = $mcp_tool->get_protocol_dto();
+			$structured = null !== $dto->getOutputSchema() ? $result : null;
+
 			return CallToolResult::fromArray(
 				array(
 					'content'           => array( ContentBlockHelper::text( $json_text ) ),
-					'structuredContent' => $result,
+					'structuredContent' => $structured,
 					'isError'           => false,
 				)
 			);

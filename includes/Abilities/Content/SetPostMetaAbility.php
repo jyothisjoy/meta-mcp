@@ -32,7 +32,7 @@ final class SetPostMetaAbility {
 			'set-post-meta',
 			array(
 				'label'               => 'Set Post Meta',
-				'description'         => 'Read and write the custom fields of a post. Pass meta as key/value pairs to write them, with a null value to delete a key. Protected keys starting with an underscore are rejected unless the site allowlists them; Elementor keys are managed by the elementor-* abilities instead.',
+				'description'         => 'Read and write the custom fields of a post. Pass meta as key/value pairs to write them, with a null value to delete a key. Protected keys starting with an underscore are rejected unless the site allowlists them (get-post with include_protected_meta shows which are writable); if every key is rejected the call fails; Elementor keys are managed by the elementor-* abilities instead.',
 				'input_schema'        => array(
 					'type'       => 'object',
 					'properties' => array(
@@ -95,6 +95,17 @@ final class SetPostMetaAbility {
 			}
 
 			$result = MetaSupport::write_meta( $post->ID, $input['meta'], $post->post_type );
+
+			// Nothing written and something refused: that is a failure, not a
+			// success with a footnote, so a client does not report a change that
+			// never happened.
+			if ( empty( $result['updated'] ) && empty( $result['deleted'] ) && ! empty( $result['errors'] ) ) {
+				return AbilityRegistrar::failure_with_details(
+					'No custom fields were written: every key was rejected.',
+					'meta_rejected',
+					array( 'errors' => (object) $result['errors'] )
+				);
+			}
 		}
 
 		return array(

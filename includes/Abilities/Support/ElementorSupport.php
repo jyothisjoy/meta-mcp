@@ -138,6 +138,130 @@ final class ElementorSupport {
 	}
 
 	/**
+	 * Widgets whose purpose is raw markup or script.
+	 */
+	private const RAW_MARKUP_WIDGETS = array( 'html', 'shortcode', 'code-highlight' );
+
+	/**
+	 * Setting keys that inject CSS or HTML attributes.
+	 */
+	private const RAW_MARKUP_SETTINGS = array( 'custom_css', '_attributes', 'custom_attributes', '_element_custom_attributes' );
+
+	/**
+	 * Applies the "unfiltered_html" rule to an element tree before it is saved.
+	 *
+	 * Users with unfiltered_html (administrators, and editors on a single site)
+	 * save as they are. For everyone else, every element whose settings are new
+	 * or differ from what is stored has its text run through wp_kses_post() and
+	 * its custom CSS and attributes removed, and a new or changed HTML, shortcode
+	 * or code widget is refused - the same limits Elementor's editor and
+	 * post_content apply. Elements left as they are, such as an administrator's
+	 * HTML widget on the page, are kept unchanged.
+	 *
+	 * @param int               $post_id  Post ID.
+	 * @param array<int, mixed> $elements Element tree.
+	 *
+	 * @return array<int, mixed>|\WP_Error The tree to save.
+	 */
+	private static function filter_for_user( int $post_id, array $elements ) {
+		if ( current_user_can( 'unfiltered_html' ) ) {
+			return $elements;
+		}
+
+		$stored = array();
+		$old    = self::get_elements( $post_id );
+
+		if ( is_array( $old ) ) {
+			self::index_settings( $old, $stored );
+		}
+
+		return self::filter_elements( $elements, $stored, 0 );
+	}
+
+	/**
+	 * Collects each stored element's settings by element id.
+	 *
+	 * @param array<int, mixed>    $elements Element tree.
+	 * @param array<string, mixed> $index    Settings by id; filled in.
+	 *
+	 * @return void
+	 */
+	private static function index_settings( array $elements, array &$index ): void {
+		foreach ( $elements as $element ) {
+			if ( ! is_array( $element ) ) {
+				continue;
+			}
+
+			if ( isset( $element['id'] ) ) {
+				$index[ (string) $element['id'] ] = array(
+					'settings' => $element['settings'] ?? array(),
+					'widget'   => (string) ( $element['widgetType'] ?? '' ),
+				);
+			}
+
+			if ( ! empty( $element['elements'] ) && is_array( $element['elements'] ) ) {
+				self::index_settings( $element['elements'], $index );
+			}
+		}
+	}
+
+	/**
+	 * Filters new or changed elements; see filter_for_user().
+	 *
+	 * @param array<int, mixed>    $elements Element tree.
+	 * @param array<string, mixed> $stored   Stored settings by id.
+	 * @param int                  $depth    Nesting depth.
+	 *
+	 * @return array<int, mixed>|\WP_Error The filtered tree.
+	 */
+	private static function filter_elements( array $elements, array $stored, int $depth ) {
+		if ( $depth > 50 ) {
+			return new WP_Error( 'elements_too_deep', 'The element tree is nested more than 50 levels deep.' );
+		}
+
+		foreach ( $elements as $i => $element ) {
+			if ( ! is_array( $element ) ) {
+				continue;
+			}
+
+			$id       = isset( $element['id'] ) ? (string) $element['id'] : '';
+			$settings = isset( $element['settings'] ) && is_array( $element['settings'] ) ? $element['settings'] : array();
+			$widget   = (string) ( $element['widgetType'] ?? '' );
+			$same     = '' !== $id && isset( $stored[ $id ] ) && $stored[ $id ]['settings'] == $settings && $stored[ $id ]['widget'] === $widget; // phpcs:ignore Universal.Operators.StrictComparisons -- Array comparison by value.
+
+			if ( ! $same ) {
+				if ( in_array( $widget, self::RAW_MARKUP_WIDGETS, true ) ) {
+					return new WP_Error(
+						'unfiltered_html_required',
+						sprintf( 'Adding or changing a "%s" widget needs the "unfiltered_html" capability (administrators).', $widget )
+					);
+				}
+
+				foreach ( self::RAW_MARKUP_SETTINGS as $key ) {
+					unset( $settings[ $key ] );
+				}
+
+				$elements[ $i ]['settings'] = map_deep(
+					$settings,
+					static fn( $value ) => is_string( $value ) ? wp_kses_post( $value ) : $value
+				);
+			}
+
+			if ( ! empty( $element['elements'] ) && is_array( $element['elements'] ) ) {
+				$children = self::filter_elements( $element['elements'], $stored, $depth + 1 );
+
+				if ( is_wp_error( $children ) ) {
+					return $children;
+				}
+
+				$elements[ $i ]['elements'] = $children;
+			}
+		}
+
+		return $elements;
+	}
+
+	/**
 	 * Persists an element tree onto a post.
 	 *
 	 * Prefers Elementor's document API, which regenerates CSS, stores a revision
@@ -154,6 +278,12 @@ final class ElementorSupport {
 
 		if ( ! $post ) {
 			return new WP_Error( 'post_not_found', sprintf( 'No post found with ID %d.', $post_id ) );
+		}
+
+		$elements = self::filter_for_user( $post_id, $elements );
+
+		if ( is_wp_error( $elements ) ) {
+			return $elements;
 		}
 
 		// A header, footer or other Theme Builder template is only rendered while
@@ -195,7 +325,12 @@ final class ElementorSupport {
 
 			if ( $document ) {
 				try {
-					$document->save( array( 'elements' => $elements ) );
+					// save() returns false, without throwing, when Elementor refuses
+					// (post type not enabled for it, its own capability check). The
+					// caller's permissions were checked before getting here.
+					if ( false === $document->save( array( 'elements' => $elements ) ) ) {
+						return self::save_elements_manually( $post_id, $elements, $post_type, 'Elementor document save returned false.' );
+					}
 
 					// Elementor's own save does not reliably set the edit mode on a
 					// post that was not previously built with Elementor — a page

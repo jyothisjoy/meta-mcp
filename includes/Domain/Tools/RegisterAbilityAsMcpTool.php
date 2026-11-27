@@ -130,6 +130,30 @@ class RegisterAbilityAsMcpTool {
 		// Add optional output schema, transformed to object format if needed.
 		$output_schema    = $this->ability->get_output_schema();
 		$output_transform = null;
+
+		/**
+		 * Filters whether a tool's outputSchema is listed to MCP clients.
+		 *
+		 * Meta MCP's content abilities keep their output schemas for the Abilities
+		 * API, but do not list them: a client reads every schema in tools/list at the
+		 * start of each session, and a declared schema obliges the server to send
+		 * each result twice (as text and as structuredContent).
+		 *
+		 * @since 1.8.0
+		 *
+		 * @param bool        $include Whether to list the output schema.
+		 * @param \WP_Ability $ability The ability.
+		 */
+		$include_output = (bool) apply_filters(
+			'mcp_adapter_tool_list_output_schema',
+			! method_exists( $this->ability, 'get_category' ) || \WP\MCP\Abilities\Support\AbilityRegistrar::CATEGORY !== $this->ability->get_category(),
+			$this->ability
+		);
+
+		if ( ! $include_output ) {
+			$output_schema = array();
+		}
+
 		if ( ! empty( $output_schema ) ) {
 			$output_transform          = SchemaTransformer::transform_to_object_schema(
 				$output_schema,
@@ -147,10 +171,7 @@ class RegisterAbilityAsMcpTool {
 			}
 		}
 
-		// Set annotations.title from label if annotations exist but don't have a title.
-		if ( ! empty( $label ) && isset( $tool_data['annotations'] ) && ! isset( $tool_data['annotations']['title'] ) ) {
-			$tool_data['annotations']['title'] = $label;
-		}
+		// annotations.title is not repeated: the tool's own `title` already carries the label.
 
 		// Store transformation metadata as internal metadata (stripped before responding to clients).
 		// Only record keys when semantically meaningful to keep metadata minimal and accurate.

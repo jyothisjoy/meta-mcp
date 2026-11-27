@@ -44,7 +44,7 @@ final class ReplaceTextAbility {
 
 		$properties['replace']     = array(
 			'type'        => 'string',
-			'description' => 'The new text. May be empty to delete the match. In "phone" mode give the number formatted as it should be displayed, e.g. "+971 2 444 1234"; where the old number was written without separators (tel: links, WhatsApp URLs, schema) the compact form "+97124441234" is written instead.',
+			'description' => 'The new text; empty deletes the match. In "phone" mode give the display format, e.g. "+971 2 444 1234"; compact places (tel:, WhatsApp, schema) get "+97124441234".',
 		);
 		$properties['dry_run']     = array(
 			'type'        => 'boolean',
@@ -63,7 +63,7 @@ final class ReplaceTextAbility {
 			'replace-text',
 			array(
 				'label'               => 'Replace Text',
-				'description'         => 'Find and replace text across the site in one call: post titles, excerpts and content; every text, link and repeater setting of every Elementor widget, on pages AND in Elementor templates (headers, footers, global widgets, popups) that render on many pages; Elementor Custom Code snippets such as JSON-LD schema; and menu item labels and custom link URLs. This is the way to change text that update-post cannot reach because it lives in Elementor data or a shared template. Use match_mode "phone" to replace a phone number in all its formats, including tel: links. Narrow the scope with post_ids, post_types or language (e.g. only the Arabic pages). Run with dry_run first to see every match. Writes go through Elementor\'s document API and wp_update_post, so revisions are kept; to undo, run again with find and replace swapped. Reports per post what was replaced and where.',
+				'description'         => 'Find and replace text site-wide in one call: post titles, excerpts and content; every text, link and repeater setting of Elementor widgets on pages and in shared templates (headers, footers, global widgets, popups); Elementor Custom Code snippets (e.g. JSON-LD); menu item labels and custom link URLs. Use it for text update-post cannot reach. match_mode "phone" replaces a number in all its formats, including tel: links. Narrow with post_ids, post_types or language. Run dry_run first. Revisions are kept; undo by swapping find and replace.',
 				'input_schema'        => array(
 					'type'       => 'object',
 					'properties' => $properties,

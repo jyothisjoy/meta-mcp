@@ -31,7 +31,7 @@ final class GetSiteSettingsAbility {
 			'get-site-settings',
 			array(
 				'label'               => 'Get Site Settings',
-				'description'         => 'Read the site-wide WordPress settings this connection may manage: blogname (Site Title), blogdescription (Tagline), timezone, date and time formats, show_on_front / page_on_front / page_for_posts (homepage and posts page), posts_per_page, default comment status and site_icon. Change them with update-site-settings.',
+				'description'         => 'Read the site-wide WordPress settings this connection may manage: blogname (Site Title), blogdescription (Tagline), timezone, date and time formats, show_on_front / page_on_front / page_for_posts (homepage and posts page), posts_per_page, site_icon, WPLANG (site language), blog_public (search engine visibility: 0 means "Discourage search engines"), permalink_structure / category_base / tag_base, Discussion settings (comments, moderation, avatars), Media image sizes and upload folders, and wp_page_for_privacy_policy. Each comes with its kind (text, int, bool, enum, page...). Change them with update-site-settings.',
 				'input_schema'        => array(
 					'type'       => 'object',
 					'properties' => array(),

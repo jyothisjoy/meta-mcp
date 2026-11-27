@@ -33,6 +33,70 @@ defined( 'ABSPATH' ) || exit;
 final class RedirectsBackend {
 
 	/**
+	 * A URL or path as a comparable path on this site, or null for another site.
+	 *
+	 * @param string $url URL or path.
+	 *
+	 * @return string|null Lower-case path with one trailing slash, e.g. "/rooms/".
+	 */
+	public static function local_path( string $url ): ?string {
+		$url = trim( $url );
+
+		if ( '' === $url ) {
+			return null;
+		}
+
+		$parts = wp_parse_url( $url );
+		$host  = isset( $parts['host'] ) ? strtolower( (string) $parts['host'] ) : '';
+		$home  = strtolower( (string) wp_parse_url( home_url(), PHP_URL_HOST ) );
+
+		if ( '' !== $host && preg_replace( '/^www\./', '', $host ) !== preg_replace( '/^www\./', '', $home ) ) {
+			return null;
+		}
+
+		return '/' . trim( strtolower( (string) ( $parts['path'] ?? '' ) ), '/' ) . '/';
+	}
+
+	/**
+	 * Follows a target through plain redirects and reports a loop back to the source.
+	 *
+	 * @param string                $source Plain source path of the new rule.
+	 * @param string                $target Its target.
+	 * @param array<string, string> $batch  Other new plain rules: source path => target.
+	 * @param string                $class  Backend class (for its existing rules).
+	 *
+	 * @return string|null The loop as "a -> b -> a", or null when there is none.
+	 */
+	public static function find_loop( string $source, string $target, array $batch, string $class ): ?string {
+		$start = self::local_path( $source );
+		$next  = self::local_path( $target );
+		$chain = array( $start );
+
+		for ( $hop = 0; null !== $start && null !== $next && $hop < 10; $hop++ ) {
+			$chain[] = $next;
+
+			if ( $next === $start ) {
+				return implode( ' -> ', $chain );
+			}
+
+			if ( isset( $batch[ $next ] ) ) {
+				$next = self::local_path( $batch[ $next ] );
+				continue;
+			}
+
+			$existing = $class::find_by_source( $next );
+
+			if ( empty( $existing ) || empty( $existing[0]['enabled'] ) ) {
+				return null;
+			}
+
+			$next = self::local_path( (string) $existing[0]['target'] );
+		}
+
+		return null;
+	}
+
+	/**
 	 * Backend classes by provider name, in default order.
 	 */
 	private const PROVIDERS = array(
@@ -115,7 +179,7 @@ final class RedirectsBackend {
 		return array(
 			'type'        => 'string',
 			'enum'        => self::names(),
-			'description' => 'Which redirect manager to use: "redirection" (the Redirection plugin) or "rank_math" (Rank Math → Redirections). Default: the one active on the site (Redirection when both are). content-integrations-status shows which are active.',
+			'description' => '"redirection" (Redirection plugin) or "rank_math" (Rank Math Redirections). Default: the active one (Redirection if both).',
 		);
 	}
 
@@ -128,7 +192,7 @@ final class RedirectsBackend {
 		$schema = RedirectionSupport::rule_schema();
 
 		$schema['code']['enum']        = array_values( array_unique( array_merge( RedirectionSupport::REDIRECT_CODES, RedirectionSupport::ERROR_CODES, RankMathRedirectsSupport::CODES ) ) );
-		$schema['code']['description'] = 'HTTP status. 301 (default) for a permanent move, 302/307 temporary, 410 to tell search engines the page is gone for good. Redirection also takes 303, 308 and 404; Rank Math also takes 451 (but not 303, 308 or 404).';
+		$schema['code']['description'] = '301 (default) permanent, 302/307 temporary, 410 gone. Redirection also: 303, 308, 404. Rank Math also: 451.';
 		$schema['match']               = array(
 			'type'        => 'string',
 			'enum'        => array( 'exact', 'contains', 'start', 'end' ),
@@ -137,7 +201,7 @@ final class RedirectsBackend {
 
 		foreach ( array( 'ignore_trailing_slash', 'query', 'group_id', 'position', 'title' ) as $key ) {
 			if ( isset( $schema[ $key ]['description'] ) ) {
-				$schema[ $key ]['description'] .= ' Redirection only (Rank Math has no such option; it is ignored there).';
+				$schema[ $key ]['description'] .= ' Redirection only.';
 			}
 		}
 

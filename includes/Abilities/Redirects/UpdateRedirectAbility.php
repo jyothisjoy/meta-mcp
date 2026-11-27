@@ -120,6 +120,20 @@ final class UpdateRedirectAbility {
 				return AbilityRegistrar::failure( $prepared );
 			}
 
+			// The rule as it will be: refuse a target that leads back to its source.
+			$after_regex = array_key_exists( 'regex', $changes ) ? ContentSupport::to_bool( $changes['regex'], false ) : ! empty( $previous['regex'] );
+			$after_match = (string) ( $changes['match'] ?? ( $previous['match'] ?? 'exact' ) );
+			$after_src   = (string) ( $changes['source'] ?? $previous['source'] );
+			$after_dst   = (string) ( $changes['target'] ?? $previous['target'] );
+
+			if ( ! $after_regex && 'exact' === $after_match && '' !== $after_dst ) {
+				$loop = RedirectsBackend::find_loop( $after_src, $after_dst, array(), $backend );
+
+				if ( null !== $loop ) {
+					return AbilityRegistrar::failure( new WP_Error( 'redirect_loop', sprintf( 'This would create a redirect loop: %s.', $loop ) ) );
+				}
+			}
+
 			$notes = $prepared['notes'];
 			$saved = $backend::update( $id, $prepared );
 

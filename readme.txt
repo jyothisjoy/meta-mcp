@@ -4,7 +4,7 @@ Tags:              mcp, ai, abilities-api, model-context-protocol, menus, elemen
 Requires at least: 6.9
 Tested up to:      7.0
 Requires PHP:      7.4
-Stable tag:        1.7.0
+Stable tag:        1.8.0
 License:           GPL-2.0-or-later
 License URI:       https://spdx.org/licenses/GPL-2.0-or-later.html
 
@@ -27,20 +27,24 @@ This plugin is not distributed through WordPress.org. Its `Update URI` points at
 
 **Content editing (added in this fork):**
 
-A second MCP server at `/wp-json/mcp/wp-content` exposes 61 first-class tools:
+A second MCP server at `/wp-json/mcp/wp-content` exposes up to 84 first-class tools:
 
-* **Content** – Query, read, create, update, publish, schedule and delete posts of any post type, plus taxonomy terms, custom fields, media uploads and media alt text, titles and captions (with a "missing alt text" listing). Resolve page URLs to post ids.
+* **Content** – Query, read, create, update, publish, schedule and delete posts of any post type, plus custom fields (including underscore-prefixed fields an administrator allowlists), media uploads, in-place media file replacement that keeps the attachment id and URL, and media alt text, titles and captions (with a "missing alt text" listing). Resolve page URLs to post ids.
+* **Taxonomy terms** – List, read, create, rename, move and delete categories, tags and custom taxonomy terms, with their Polylang language and translations.
+* **Revisions** – List a post's revisions, compare one with the current version, and restore it; the current state is saved as a revision first, so a restore can itself be undone.
+* **Comments** – List, approve, unapprove, spam, trash, edit, reply to and delete comments. Commenter IP addresses and browser details are never returned.
 * **Find and replace** – Find text wherever it is stored - post fields, Elementor widgets on pages and in shared header/footer templates, Custom Code snippets, menu items - and replace it in one call, with a dry run and a phone-number mode that matches every formatting, including `tel:` links.
 * **Users** – List, read, create, edit and delete user accounts, with roles and profile fields. Switched off by default, and no tool ever reads or sets a password.
 * **Navigation menus** – List and read the site's menus as a nested tree, create and rename them, add, edit, move and remove individual items, write a whole menu structure in one call, and assign menus to the theme's locations. Items may point at a page, post, category, tag, post type archive or a custom URL, and every target is checked before it is written.
-* **Elementor** – Read a layout as a flat, id-addressable list; patch individual widgets by element id; or read and replace the whole element tree. Writes route through Elementor's document API so the generated CSS and companion metas stay consistent.
-* **Polylang and Polylang Pro** – Languages, per-post language assignment, linking translations, creating a translation that carries over terms, meta and the Elementor layout, term translations, and on-demand structure sync.
-* **Rank Math SEO** – Read and write per-page SEO titles, descriptions, canonicals and robots on up to 100 posts in one call, find pages whose own robots or canonical override the site defaults, and change the Titles & Meta, Sitemap and General settings, and regenerate the XML sitemaps.
+* **Elementor** – Read a layout as a flat, id-addressable list; patch individual widgets by element id; or read and replace the whole element tree. Writes route through Elementor's document API so the generated CSS and companion metas stay consistent. Read and edit the global kit's colours and typography.
+* **Polylang and Polylang Pro** – Languages, per-post language assignment, linking translations, creating a translation that carries over terms, meta and the Elementor layout, term translations, on-demand structure sync, and string translations (Strings translations screen).
+* **SEO (Rank Math or Yoast SEO)** – Read and write per-page SEO titles, descriptions, focus keywords, canonicals, robots and social fields on up to 100 posts in one call, find pages whose own robots or canonical override the site defaults, change the plugin's settings, and regenerate the XML sitemaps. With Yoast, each post's indexable is rebuilt after a write so the front end shows the change immediately.
 * **Redirects** – List, create (singly or in bulk, exact or regex, 301/302/307/308 or 410), edit, enable, disable and delete redirect rules, in the Redirection plugin or Rank Math's Redirections module, whichever the site uses.
 * **Elementor Custom Code** – List, read, create and edit Elementor Pro Custom Code snippets, including their code, location, priority and display conditions.
-* **Site** – Read and change the Site Title, Tagline, homepage and other General/Reading settings from a fixed allowlist, and purge the page cache (LiteSpeed, WP Rocket, W3 Total Cache, WP Super Cache, SiteGround) and Elementor's CSS.
+* **Site** – Read and change the Site Title, Tagline, homepage and other General/Reading settings from a fixed allowlist, and purge the page cache (LiteSpeed, WP Rocket, W3 Total Cache, WP Super Cache, SiteGround) and Elementor's CSS. Read a site health summary (versions, available updates, plugins, search engine visibility, cron, caching), and read and change LiteSpeed Cache settings, with credentials always redacted.
+* **Form submissions** – Read Elementor Pro form submissions. Switched off by default, because submissions hold visitors' personal details.
 
-Elementor, Polylang, Rank Math and Redirection are optional (the redirect tools work with either Redirection or Rank Math → Redirections). When they are inactive, the relevant tools report that plainly instead of failing. The Rank Math, Redirection, Custom Code and site tools share a "Site-wide tools" switch on the settings screen.
+Elementor, Polylang, Rank Math, Yoast SEO, LiteSpeed Cache and Redirection are optional (the redirect tools work with either Redirection or Rank Math → Redirections). When they are inactive, the relevant tools report that plainly instead of failing. The Rank Math, Redirection, Custom Code and site tools share a "Site-wide tools" switch on the settings screen.
 
 Menu editing is gated on the same `edit_theme_options` capability WordPress uses for Appearance → Menus, and can be switched off entirely on the settings screen. On a block theme, the menu tools also report the Navigation blocks the theme uses, which are ordinary `wp_navigation` posts the content tools can already read and write.
 
@@ -71,6 +75,36 @@ Yes. Those classic menus have their own set of tools, because a menu item stores
 No. The content tools work on any WordPress site. The Elementor and Polylang tools activate only when those plugins are present; call the `content-integrations-status` tool to see what a given site supports.
 
 == Changelog ==
+
+= 1.8.0 =
+* The SEO abilities (`seo-get-posts`, `seo-update-posts`, `seo-get-settings`, `seo-update-settings`, `seo-regenerate-sitemap`) now also work with Yoast SEO. Without a `provider` input they use whichever is active (Rank Math when both are); every result says which `provider` it used. Yoast's robots, canonical, social and cornerstone fields are written to its own meta keys and the post's indexable is rebuilt, so the page head changes straight away; settings go through Yoast's own option validation.
+* Added term tools: `list-terms`, `get-term`, `create-term`, `update-term`, `delete-term`. A tag created by `set-post-terms` could not be removed before.
+* Added revision tools: `list-revisions`, `get-revision` (with a comparison against the current version), `restore-revision`.
+* Added comment tools: `list-comments`, `update-comment`, `reply-comment`, `delete-comment`, with their own switch on the settings screen (on by default).
+* Added `replace-media`: replaces an attachment's file and regenerates its sizes while keeping the attachment id and, by default, the URL, so every page that uses it shows the new image.
+* Added `site-health`, `litespeed-get-settings` and `litespeed-update-settings`, `elementor-get-kit` and `elementor-update-kit`, `polylang-list-strings` and `polylang-set-string-translations`.
+* Added read-only Elementor form submission tools (`elementor-list-form-submissions`, `elementor-get-form-submission`), off by default.
+* `get-post` takes `include_protected_meta`, listing underscore-prefixed fields and whether each is writable. Settings → Meta MCP has a new list of protected fields the meta tools may write (exact keys, or prefixes ending in `*`). Fields owned by Elementor, Rank Math, Yoast and Polylang stay blocked.
+* `set-post-meta` now fails, with the reason for each key, when none of the keys could be written; it used to report success.
+* Fixed: the menu tools refused the numeric menu id that `list-menus` and `create-menu` return; `menu` now takes a number or a string.
+* Fixed: `elementor-get-conditions` failed on a template with no Polylang language.
+* Fixed: restoring a trashed draft that had no slug left its slug as `__trashed`.
+* Fixed: a Rank Math regex redirect containing a backslash (`\d`, `\w`, `\.`) never matched, because Rank Math strips one level of backslashes before matching. Backslashes are now stored doubled so the pattern matches as written; `redirects-list` shows rules saved the old way with a `warning`.
+* Fixed: an invalid canonical or social image URL such as "not a url" was stored as `http://not%20a%20url`. SEO URLs must now be http(s) URLs with a valid host; a path such as `/page/` is taken as a URL on the site.
+* Rank Math: added `twitter_use_facebook`. Rank Math prints a post's own X (Twitter) title and description only when that is off, and it is on by default, so `twitter_title` and `twitter_description` used to have no visible effect. Setting either now switches it off; clearing both switches it back on.
+* `replace-media` with `keep_filename: false` failed; fixed.
+* `delete-term` on a taxonomy's default term now says why it is refused.
+* Site settings now also cover search engine visibility (`blog_public`), permalinks (`permalink_structure`, `category_base`, `tag_base`, with the rewrite rules rebuilt), Discussion, Media image sizes, the site language (`WPLANG`, installed languages only) and the privacy policy page. `update-site-settings` takes `dry_run` and returns `warnings` for consequential changes.
+* Smaller responses and tool list, for fewer tokens per session: Meta MCP's tools no longer list their output schemas, so each result is sent once (as text) instead of twice; results are encoded without escaped slashes or escaped Arabic, Russian and Chinese characters; tools of inactive plugins are no longer listed (filter `mcp_adapter_register_inactive_integrations` to list them); LiteSpeed tools are listed only with LiteSpeed active; `list-posts` and `list-terms` give translations as {lang: id} and leave out edit_link and date_gmt; `seo-get-posts` gives each post type's defaults once instead of on every post; long tool descriptions were shortened.
+* Security: `list-posts` no longer shows other authors' drafts, pending or private posts to contributors and authors; published posts of non-public post types (form entries, bookings) need edit permission to read; password-protected content, rendered content and Elementor layouts are withheld from users who cannot edit the post, and cannot be copied into a translation; role changes are limited to the roles the user may assign (`editable_roles`) and need `promote_user` on that user; Elementor writes by users without `unfiltered_html` have their text run through kses and their custom CSS and attributes removed, and cannot add or change HTML, shortcode or code widgets; SEO settings reads hide credentials (OAuth tokens, API and licence keys) and writes refuse them; user meta reads hide login sessions, capabilities and credential-like keys; `set-post-meta` honours registered meta auth callbacks; the Elementor kit needs edit rights to read.
+* Fixed: a second copy of the plugin, or the official MCP Adapter beside it, no longer causes a fatal error (`WP\MCP\constants()` was declared twice).
+* Fixed: `list-revisions` loaded every revision with its Elementor layout and could run out of memory; it now loads one page without meta.
+* Fixed: restoring a post from the trash brought it back as a draft; it now gets back the status it had.
+* Fixed: `seo-regenerate-sitemap` with `flush_rewrites` rebuilt the rewrite rules inside the REST request, which can drop Polylang's rules and 404 archives; it now rebuilds them through a front-end request, as `update-site-settings` does. Sitemap warming stops after 45 seconds.
+* Fixed: URL downloads for `upload-media` and `replace-media` time out after 60 seconds and are refused above the site's upload size limit.
+* Fixed: an Elementor save that Elementor silently refused was reported as a success.
+* Fixed: redirects that would loop (A to B with B to A, in one batch or with an existing rule) are refused.
+* Fixed: a failed `set-menu-items` removes the items it had already added; a page cannot be made a child of its own descendant; `list-posts` and the template list include every language; `list-comments` totals are right for non-moderators; translations no longer copy the source page's canonical URL; phone matching treats "+971 (0)2" as "+971 2"; `replace-media` lists resized copies whose file names changed and purges the whole page cache; Site Health tests load the admin helpers they need; very large Elementor structures with settings are capped at about 300 KB.
 
 = 1.7.0 =
 * The redirect abilities (`redirects-list`, `redirects-create`, `redirects-update`, `redirects-delete`) now also work with Rank Math's Redirections module, not only the Redirection plugin. Without a `provider` input they use whichever is active (Redirection when both are); `provider: "rank_math"` or `"redirection"` picks one. Inputs and outputs are the same for both; every rule now says which `provider` it lives in.

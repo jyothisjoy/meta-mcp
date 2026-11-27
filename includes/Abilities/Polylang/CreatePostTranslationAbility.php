@@ -138,6 +138,11 @@ final class CreatePostTranslationAbility {
 			return AbilityRegistrar::failure( $source );
 		}
 
+		// Copying would hand password-protected content to someone who cannot read it.
+		if ( ! ContentSupport::can_see_protected_content( $source ) ) {
+			return AbilityRegistrar::failure( new WP_Error( 'content_protected', sprintf( 'Post %d is password protected; only users who can edit it can translate it.', $source->ID ) ) );
+		}
+
 		$language = isset( $input['language'] ) ? (string) $input['language'] : '';
 		$valid    = PolylangSupport::validate_language( $language );
 

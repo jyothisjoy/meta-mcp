@@ -36,8 +36,8 @@ final class AddMenuItemAbility {
 					'type'       => 'object',
 					'properties' => array(
 						'menu'        => array(
-							'type'        => 'string',
-							'description' => 'Menu ID, slug or name.',
+							'type'        => array( 'integer', 'string' ),
+							'description' => 'Menu ID (number, as list-menus returns it), slug or name.',
 						),
 						'title'       => array(
 							'type'        => 'string',

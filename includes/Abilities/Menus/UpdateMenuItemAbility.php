@@ -40,7 +40,7 @@ final class UpdateMenuItemAbility {
 							'description' => 'The menu item id, as returned by get-menu. This is not the id of the page it links to.',
 						),
 						'menu'        => array(
-							'type'        => 'string',
+							'type'        => array( 'integer', 'string' ),
 							'description' => 'Optional menu ID, slug or name to check the item belongs to.',
 						),
 						'title'       => array(

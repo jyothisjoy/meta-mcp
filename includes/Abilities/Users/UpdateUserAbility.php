@@ -154,7 +154,7 @@ final class UpdateUserAbility {
 				);
 			}
 
-			$role_valid = UserSupport::validate_role( $role );
+			$role_valid = UserSupport::validate_role( $role, (int) $user->ID );
 
 			if ( is_wp_error( $role_valid ) ) {
 				return AbilityRegistrar::failure( $role_valid );

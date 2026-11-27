@@ -290,6 +290,14 @@ final class RankMathRedirectsSupport {
 				if ( false === @preg_match( '@' . $source . '@', '' ) ) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Validating a user-supplied pattern.
 					return new WP_Error( 'invalid_regex', sprintf( 'source "%s" is not a valid regular expression.', $source ) );
 				}
+
+				// Rank Math runs a regex source through stripslashes() before matching
+				// (Redirection::get_clean_pattern), so "\d" reaches preg_match as "d" and
+				// never matches. Store each backslash doubled so the pattern arrives intact.
+				if ( false !== strpos( $source, '\\' ) ) {
+					$source  = str_replace( '\\', '\\\\', $source );
+					$notes[] = 'Backslashes are stored doubled, because Rank Math strips one level of backslashes before matching a regex.';
+				}
 			} elseif ( '' === trim( self::relative( $source ), '/' ) ) {
 				return new WP_Error( 'invalid_source', sprintf( 'source "%s" is the homepage or another site: Rank Math redirects a path on this site.', $source ) );
 			}
@@ -447,11 +455,29 @@ final class RankMathRedirectsSupport {
 
 			$comparison = (string) ( $src['comparison'] ?? 'exact' );
 			$pattern    = wp_specialchars_decode( (string) ( $src['pattern'] ?? '' ) );
-			$clean[]    = array(
+			$entry      = array(
 				'pattern'     => $pattern,
 				'comparison'  => $comparison,
 				'ignore_case' => 'case' === ( $src['ignore'] ?? '' ),
 			);
+
+			// A regex is stored with doubled backslashes (see prepare()); show it as written.
+			// One stored with single backslashes (by Rank Math's own screen, or by Meta MCP
+			// before 1.8.0) is shown as it is, with a warning: Rank Math strips them.
+			if ( 'regex' === $comparison && false !== strpos( $pattern, '\\' ) ) {
+				$entry['stored_pattern'] = $pattern;
+
+				if ( false !== strpos( str_replace( '\\\\', '', $pattern ), '\\' ) ) {
+					$entry['warning'] = sprintf(
+						'Rank Math strips the backslashes from this regex before matching, so it is tested as "%s" and may never match. Re-save it with redirects-update, passing this source again, to store it so it matches as written.',
+						stripslashes( $pattern )
+					);
+				} else {
+					$entry['pattern'] = stripslashes( $pattern );
+				}
+			}
+
+			$clean[] = $entry;
 		}
 
 		$first = $clean[0] ?? array( 'pattern' => '', 'comparison' => 'exact', 'ignore_case' => false );

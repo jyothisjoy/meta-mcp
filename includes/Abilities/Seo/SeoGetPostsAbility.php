@@ -1,6 +1,6 @@
 <?php
 /**
- * Ability for reading the Rank Math SEO fields of posts.
+ * Ability for reading the SEO fields (Rank Math or Yoast SEO) of posts.
  *
  * @package McpAdapter
  */
@@ -11,7 +11,7 @@ namespace WP\MCP\Abilities\Seo;
 
 use WP\MCP\Abilities\Support\AbilityRegistrar;
 use WP\MCP\Abilities\Support\ContentSupport;
-use WP\MCP\Abilities\Support\RankMathSupport;
+use WP\MCP\Abilities\Support\SeoBackend;
 use WP_Error;
 use WP_Post;
 use WP_Query;
@@ -20,7 +20,7 @@ use WP_Query;
 defined( 'ABSPATH' ) || exit;
 
 /**
- * SEO Get Posts - Reads Rank Math titles, descriptions, canonicals and robots.
+ * SEO Get Posts - Reads SEO titles, descriptions, canonicals and robots from Rank Math or Yoast SEO.
  */
 final class SeoGetPostsAbility {
 
@@ -43,8 +43,8 @@ final class SeoGetPostsAbility {
 		AbilityRegistrar::register(
 			'seo-get-posts',
 			array(
-				'label'               => 'Get Rank Math SEO Fields',
-				'description'         => 'Read the Rank Math SEO fields of posts: SEO title, meta description, focus keyword, canonical URL, robots and social fields, plus what Rank Math will actually output (effective robots and where they come from, effective canonical, title template) and the post type defaults. Pass post_ids, or post_type to page through a whole type. Use filter to find problem pages, e.g. "robots_override" lists posts whose own robots setting overrides the sitewide default, and "canonical_override" lists posts canonicalised elsewhere.',
+				'label'               => 'Get SEO Fields',
+				'description'         => 'Read SEO fields of posts from the active SEO plugin (Rank Math or Yoast): title, description, focus keyword, canonical, robots, breadcrumb title, social fields, plus what the plugin actually outputs ("effective" robots with their source, canonical, title/description templates) and post type defaults. With Yoast, "effective" adds frontend_* values and "indexable" shows what the page prints. Pass post_ids, or post_type to page through a type. filter finds problem pages, e.g. "robots_override" (post overrides type default) or "canonical_override".',
 				'input_schema'        => array(
 					'type'       => 'object',
 					'properties' => array(
@@ -70,12 +70,14 @@ final class SeoGetPostsAbility {
 							'type'        => 'integer',
 							'description' => 'Page number with post_type. Default 1.',
 						),
+						'provider'  => SeoBackend::provider_schema(),
 					),
 				),
 				'output_schema'       => array(
 					'type'       => 'object',
 					'properties' => array(
 						'success'     => array( 'type' => 'boolean' ),
+						'provider'    => array( 'type' => 'string' ),
 						'posts'       => array( 'type' => 'array' ),
 						'errors'      => array( 'type' => 'object' ),
 						'total'       => array( 'type' => 'integer' ),
@@ -101,20 +103,21 @@ final class SeoGetPostsAbility {
 	 * @return array<string, mixed> The SEO data.
 	 */
 	public static function execute( $input = array() ): array {
-		$active = RankMathSupport::require_active();
+		$input   = is_array( $input ) ? $input : array();
+		$backend = SeoBackend::resolve( $input );
 
-		if ( is_wp_error( $active ) ) {
-			return AbilityRegistrar::failure( $active );
+		if ( is_wp_error( $backend ) ) {
+			return AbilityRegistrar::failure( $backend );
 		}
 
-		$input = is_array( $input ) ? $input : array();
-
 		if ( ! empty( $input['post_ids'] ) && is_array( $input['post_ids'] ) ) {
-			return self::by_ids( $input['post_ids'] );
+			return array( 'provider' => SeoBackend::name_of( $backend ) ) + self::by_ids( $backend, $input['post_ids'] );
 		}
 
 		if ( ! empty( $input['post_type'] ) ) {
-			return self::by_type( $input );
+			$result = self::by_type( $backend, $input );
+
+			return empty( $result['success'] ) ? $result : array( 'provider' => SeoBackend::name_of( $backend ) ) + $result;
 		}
 
 		return AbilityRegistrar::failure( new WP_Error( 'missing_target', 'Pass post_ids or post_type.' ) );
@@ -123,11 +126,12 @@ final class SeoGetPostsAbility {
 	/**
 	 * Reads specific posts.
 	 *
-	 * @param array<mixed> $ids Post IDs.
+	 * @param string       $backend Backend class.
+	 * @param array<mixed> $ids     Post IDs.
 	 *
 	 * @return array<string, mixed> The result.
 	 */
-	private static function by_ids( array $ids ): array {
+	private static function by_ids( string $backend, array $ids ): array {
 		$ids = array_slice( array_values( array_unique( array_map( 'intval', $ids ) ) ), 0, self::MAX_PER_PAGE );
 
 		$posts  = array();
@@ -141,25 +145,29 @@ final class SeoGetPostsAbility {
 				continue;
 			}
 
-			$posts[] = RankMathSupport::read_post( $post );
+			$posts[] = $backend::read_post( $post );
 		}
 
+		$defaults = self::hoist_defaults( $posts );
+
 		return array(
-			'success' => true,
-			'posts'   => $posts,
-			'errors'  => (object) $errors,
-			'total'   => count( $posts ),
+			'success'            => true,
+			'posts'              => $posts,
+			'post_type_defaults' => (object) $defaults,
+			'errors'             => (object) $errors,
+			'total'              => count( $posts ),
 		);
 	}
 
 	/**
 	 * Reads a page of posts of one type.
 	 *
-	 * @param array<string, mixed> $input Input parameters.
+	 * @param string               $backend Backend class.
+	 * @param array<string, mixed> $input   Input parameters.
 	 *
 	 * @return array<string, mixed> The result.
 	 */
-	private static function by_type( array $input ): array {
+	private static function by_type( string $backend, array $input ): array {
 		$post_type = (string) $input['post_type'];
 		$valid     = ContentSupport::validate_post_type( $post_type );
 
@@ -185,7 +193,7 @@ final class SeoGetPostsAbility {
 			'lang'                   => '',
 		);
 
-		$meta_query = self::filter_meta_query( (string) ( $input['filter'] ?? '' ) );
+		$meta_query = $backend::filter_meta_query( (string) ( $input['filter'] ?? '' ) );
 
 		if ( ! empty( $meta_query ) ) {
 			$args['meta_query'] = $meta_query; // phpcs:ignore WordPress.DB.SlowDBQuery.slow_query_meta_query -- Admin-only filtered read.
@@ -203,79 +211,40 @@ final class SeoGetPostsAbility {
 				continue;
 			}
 
-			$posts[] = RankMathSupport::read_post( $post );
+			$posts[] = $backend::read_post( $post );
 		}
 
+		$defaults = self::hoist_defaults( $posts );
+
 		return array(
-			'success'     => true,
-			'posts'       => $posts,
-			'total'       => (int) $query->found_posts,
-			'total_pages' => (int) $query->max_num_pages,
+			'success'            => true,
+			'posts'              => $posts,
+			'post_type_defaults' => (object) $defaults,
+			'total'              => (int) $query->found_posts,
+			'total_pages'        => (int) $query->max_num_pages,
 		);
 	}
 
 	/**
-	 * Builds the meta query for a filter.
+	 * Moves each post's post_type_defaults to one entry per post type.
 	 *
-	 * @param string $filter Filter name.
+	 * The defaults are the same for every post of a type, and repeating them on
+	 * each of up to 100 rows made most of the response.
 	 *
-	 * @return array<mixed> The meta query, or an empty array.
+	 * @param array<int, array<string, mixed>> $posts Posts as read_post() returns them; changed in place.
+	 *
+	 * @return array<string, mixed> Defaults keyed by post type.
 	 */
-	private static function filter_meta_query( string $filter ): array {
-		switch ( $filter ) {
-			case 'robots_override':
-				return array(
-					array(
-						'key'     => 'rank_math_robots',
-						'compare' => 'EXISTS',
-					),
-				);
+	private static function hoist_defaults( array &$posts ): array {
+		$defaults = array();
 
-			case 'noindex':
-				return array(
-					array(
-						'key'     => 'rank_math_robots',
-						'value'   => '"noindex"',
-						'compare' => 'LIKE',
-					),
-				);
-
-			case 'canonical_override':
-				return array(
-					array(
-						'key'     => 'rank_math_canonical_url',
-						'value'   => '',
-						'compare' => '!=',
-					),
-				);
-
-			case 'missing_title':
-				return array(
-					'relation' => 'OR',
-					array(
-						'key'     => 'rank_math_title',
-						'compare' => 'NOT EXISTS',
-					),
-					array(
-						'key'   => 'rank_math_title',
-						'value' => '',
-					),
-				);
-
-			case 'missing_description':
-				return array(
-					'relation' => 'OR',
-					array(
-						'key'     => 'rank_math_description',
-						'compare' => 'NOT EXISTS',
-					),
-					array(
-						'key'   => 'rank_math_description',
-						'value' => '',
-					),
-				);
+		foreach ( $posts as $i => $post ) {
+			if ( isset( $post['post_type_defaults'] ) ) {
+				$defaults[ (string) $post['post_type'] ] = $post['post_type_defaults'];
+				unset( $posts[ $i ]['post_type_defaults'] );
+			}
 		}
 
-		return array();
+		return $defaults;
 	}
 }

@@ -571,7 +571,7 @@ final class RedirectionSupport {
 			'code'                  => array(
 				'type'        => 'integer',
 				'enum'        => array_merge( self::REDIRECT_CODES, self::ERROR_CODES ),
-				'description' => 'HTTP status. 301 (default) for a permanent move, 302/307 temporary, 410 to tell search engines the page is gone for good, 404 not found.',
+				'description' => '301 (default) permanent, 302/307 temporary, 410 gone. Redirection also: 303, 308, 404. Rank Math also: 451.',
 			),
 			'regex'                 => array(
 				'type'        => 'boolean',
